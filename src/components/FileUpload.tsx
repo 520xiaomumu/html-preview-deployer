@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useCallback } from 'react';
-import { Upload, FileCode } from 'lucide-react';
+import { Upload } from 'lucide-react';
 
 interface FileUploadProps {
   onFileSelect: (file: File, content: string) => void;

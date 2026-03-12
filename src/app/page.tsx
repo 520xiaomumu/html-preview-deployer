@@ -6,20 +6,68 @@ import Preview from '@/components/Preview';
 import DeploySuccess from '@/components/DeploySuccess';
 import { Rocket, Loader2 } from 'lucide-react';
 
+type InputMode = 'upload' | 'editor';
+
+interface DeployResult {
+  id: string;
+  code: string;
+  url: string;
+  qrCode: string;
+}
+
+const DEFAULT_FILENAME = 'index.html';
+
 export default function Home() {
+  const [inputMode, setInputMode] = useState<InputMode>('upload');
   const [file, setFile] = useState<File | null>(null);
+  const [filename, setFilename] = useState(DEFAULT_FILENAME);
   const [content, setContent] = useState<string>('');
   const [isDeploying, setIsDeploying] = useState(false);
-  const [deployResult, setDeployResult] = useState<any>(null);
+  const [deployResult, setDeployResult] = useState<DeployResult | null>(null);
+
+  const hasContent = content.trim().length > 0;
+  const normalizedFilename = filename.trim() || DEFAULT_FILENAME;
+  const deployFilename = /\.html?$/i.test(normalizedFilename)
+    ? normalizedFilename
+    : `${normalizedFilename}.html`;
+  const displaySize = file ? file.size : new Blob([content]).size;
 
   const handleFileSelect = (selectedFile: File, fileContent: string) => {
+    setInputMode('upload');
     setFile(selectedFile);
+    setFilename(selectedFile.name);
     setContent(fileContent);
     setDeployResult(null); // Reset result on new file
   };
 
+  const handleModeChange = (mode: InputMode) => {
+    setInputMode(mode);
+    setDeployResult(null);
+
+    if (mode === 'editor' && !filename.trim()) {
+      setFilename(DEFAULT_FILENAME);
+    }
+  };
+
+  const handleContentChange = (nextContent: string) => {
+    setFile(null);
+    setContent(nextContent);
+    setDeployResult(null);
+  };
+
+  const handleReset = () => {
+    setInputMode('upload');
+    setFile(null);
+    setFilename(DEFAULT_FILENAME);
+    setContent('');
+    setDeployResult(null);
+  };
+
   const handleDeploy = async () => {
-    if (!file || !content) return;
+    if (!hasContent) {
+      alert('请先上传或输入 HTML 内容');
+      return;
+    }
 
     setIsDeploying(true);
     try {
@@ -30,8 +78,8 @@ export default function Home() {
         },
         body: JSON.stringify({
           content,
-          filename: file.name,
-          title: file.name.replace(/\.html?$/i, ''),
+          filename: deployFilename,
+          title: deployFilename.replace(/\.html?$/i, ''),
         }),
       });
 
@@ -56,11 +104,7 @@ export default function Home() {
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold text-gray-900">部署完成</h1>
           <button
-            onClick={() => {
-              setFile(null);
-              setContent('');
-              setDeployResult(null);
-            }}
+            onClick={handleReset}
             className="text-blue-600 hover:text-blue-800"
           >
             部署另一个文件
@@ -86,69 +130,149 @@ export default function Home() {
         </p>
       </div>
 
-      {!file ? (
-        <div className="max-w-xl mx-auto">
-          <FileUpload onFileSelect={handleFileSelect} />
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-2 space-y-6">
+          {hasContent ? (
             <Preview content={content} />
-          </div>
-          <div className="space-y-6">
-            <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">文件信息</h3>
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">文件名</span>
-                  <span className="font-medium text-gray-900 truncate max-w-[200px]" title={file.name}>
-                    {file.name}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">大小</span>
-                  <span className="font-medium text-gray-900">
-                    {(file.size / 1024).toFixed(2)} KB
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">类型</span>
-                  <span className="font-medium text-gray-900">text/html</span>
-                </div>
+          ) : (
+            <div className="border rounded-lg shadow-sm bg-white h-[600px] flex items-center justify-center p-8 text-center">
+              <div className="max-w-md space-y-3">
+                <h2 className="text-2xl font-semibold text-gray-900">实时预览将在这里显示</h2>
+                <p className="text-gray-500">
+                  你可以上传 HTML 文件，也可以直接粘贴或编写 HTML 代码，预览会随着内容变化即时更新。
+                </p>
               </div>
+            </div>
+          )}
+        </div>
 
-              <div className="mt-8 space-y-4">
-                <button
-                  onClick={handleDeploy}
-                  disabled={isDeploying}
-                  className="w-full flex justify-center items-center px-4 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isDeploying ? (
-                    <>
-                      <Loader2 className="animate-spin -ml-1 mr-2 h-5 w-5" />
-                      部署中...
-                    </>
-                  ) : (
-                    <>
-                      <Rocket className="-ml-1 mr-2 h-5 w-5" />
-                      立即部署
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={() => {
-                    setFile(null);
-                    setContent('');
-                  }}
-                  className="w-full flex justify-center items-center px-4 py-3 border border-gray-300 text-base font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  重新上传
-                </button>
+        <div className="space-y-6">
+          <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200 space-y-5">
+            <div className="inline-flex rounded-lg bg-gray-100 p-1 w-full">
+              <button
+                type="button"
+                onClick={() => handleModeChange('upload')}
+                className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                  inputMode === 'upload'
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                上传文件
+              </button>
+              <button
+                type="button"
+                onClick={() => handleModeChange('editor')}
+                className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                  inputMode === 'editor'
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                粘贴 / 编写代码
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="filename" className="block text-sm font-medium text-gray-700">
+                部署文件名
+              </label>
+              <input
+                id="filename"
+                type="text"
+                value={filename}
+                onChange={(e) => {
+                  setFilename(e.target.value);
+                  setDeployResult(null);
+                }}
+                placeholder={DEFAULT_FILENAME}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="text-xs text-gray-500">
+                未填写 .html 后缀时，系统会自动补全为 HTML 文件名。
+              </p>
+            </div>
+
+            {inputMode === 'upload' ? (
+              <div className="space-y-3">
+                <FileUpload onFileSelect={handleFileSelect} />
+                {hasContent && (
+                  <p className="text-sm text-gray-500">
+                    当前内容已载入。切换到“粘贴 / 编写代码”后，可以继续微调 HTML。
+                  </p>
+                )}
               </div>
+            ) : (
+              <div className="space-y-2">
+                <label htmlFor="html-editor" className="block text-sm font-medium text-gray-700">
+                  HTML 代码
+                </label>
+                <textarea
+                  id="html-editor"
+                  value={content}
+                  onChange={(e) => handleContentChange(e.target.value)}
+                  placeholder={'<!doctype html>\n<html>\n  <head>\n    <meta charset="UTF-8" />\n    <title>My Page</title>\n  </head>\n  <body>\n    <h1>Hello HTML</h1>\n  </body>\n</html>'}
+                  className="min-h-[360px] w-full rounded-md border border-gray-300 px-3 py-3 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  spellCheck={false}
+                />
+                <p className="text-xs text-gray-500">
+                  支持直接粘贴整段 HTML，也支持在这里从零开始编写页面。
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">内容信息</h3>
+            <div className="space-y-3">
+              <div className="flex justify-between gap-4">
+                <span className="text-gray-500">来源</span>
+                <span className="font-medium text-gray-900">{file ? '上传文件' : '手动输入'}</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-gray-500">文件名</span>
+                <span className="font-medium text-gray-900 truncate max-w-[200px]" title={deployFilename}>
+                  {deployFilename}
+                </span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-gray-500">大小</span>
+                <span className="font-medium text-gray-900">{(displaySize / 1024).toFixed(2)} KB</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-gray-500">状态</span>
+                <span className="font-medium text-gray-900">{hasContent ? '可预览 / 可部署' : '等待输入内容'}</span>
+              </div>
+            </div>
+
+            <div className="mt-8 space-y-4">
+              <button
+                onClick={handleDeploy}
+                disabled={isDeploying || !hasContent}
+                className="w-full flex justify-center items-center px-4 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isDeploying ? (
+                  <>
+                    <Loader2 className="animate-spin -ml-1 mr-2 h-5 w-5" />
+                    部署中...
+                  </>
+                ) : (
+                  <>
+                    <Rocket className="-ml-1 mr-2 h-5 w-5" />
+                    立即部署
+                  </>
+                )}
+              </button>
+              <button
+                onClick={handleReset}
+                className="w-full flex justify-center items-center px-4 py-3 border border-gray-300 text-base font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                清空内容
+              </button>
             </div>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

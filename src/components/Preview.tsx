@@ -22,6 +22,9 @@ export default function Preview({ content, url }: PreviewProps) {
       } else if (content) {
         iframeRef.current.srcdoc = content;
         iframeRef.current.removeAttribute('src');
+      } else {
+        iframeRef.current.removeAttribute('src');
+        iframeRef.current.removeAttribute('srcdoc');
       }
     }
   }, [content, url]);
