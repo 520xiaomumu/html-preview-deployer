@@ -27,6 +27,7 @@ export async function GET(
       title: deployment.title,
       filename: deployment.filename,
       filePath: deployment.file_path,
+      fileSize: deployment.file_size,
       qrCodePath: deployment.qr_code_path,
       createdAt: deployment.created_at,
       updatedAt: deployment.updated_at,

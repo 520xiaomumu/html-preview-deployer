@@ -6,6 +6,7 @@ import { Deployment } from '@/lib/db';
 import DeploySuccess from '@/components/DeploySuccess';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import Preview from '@/components/Preview';
+import Toast from '@/components/Toast';
 import { Trash2, ArrowLeft, Clock, Eye, PowerOff, PlayCircle } from 'lucide-react';
 import Link from 'next/link';
 
@@ -13,7 +14,20 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
   const [deploy, setDeploy] = useState<Deployment | null>(null);
   const [loading, setLoading] = useState(true);
   const [id, setId] = useState<string>('');
+  const [toast, setToast] = useState<{
+    open: boolean;
+    message: string;
+    type: 'success' | 'error' | 'info';
+  }>({
+    open: false,
+    message: '',
+    type: 'info',
+  });
   const router = useRouter();
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ open: true, message, type });
+  };
 
   // Dialog State
   const [dialogState, setDialogState] = useState<{
@@ -47,11 +61,12 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
           const data = await res.json();
           setDeploy(data);
         } else {
-          alert('部署不存在');
+          showToast('部署不存在', 'error');
           router.push('/deploy');
         }
       } catch (error) {
         console.error('Fetch error', error);
+        showToast('获取部署详情失败', 'error');
       } finally {
         setLoading(false);
       }
@@ -98,17 +113,17 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
             body: JSON.stringify({ status: newStatus }),
           });
           if (res.ok) {
-            alert(`已${actionName}`);
+            showToast(`已${actionName}`, 'success');
             // Refresh data
             const updatedRes = await fetch(`/api/deploy/${id}`);
             const updatedData = await updatedRes.json();
             setDeploy(updatedData);
           } else {
-            alert(`${actionName}失败`);
+            showToast(`${actionName}失败`, 'error');
           }
         } catch (error) {
           console.error('Toggle status error', error);
-          alert('操作失败');
+          showToast('操作失败', 'error');
         }
       }
     );
@@ -125,14 +140,14 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
             method: 'DELETE',
           });
           if (res.ok) {
-            alert('已删除');
+            showToast('已删除该部署', 'success');
             router.push('/deploy');
           } else {
-            alert('删除失败');
+            showToast('删除失败', 'error');
           }
         } catch (error) {
           console.error('Delete error', error);
-          alert('操作失败');
+          showToast('操作失败', 'error');
         }
       }
     );
@@ -154,6 +169,12 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
 
   return (
     <div className="space-y-6">
+      <Toast
+        isOpen={toast.open}
+        message={toast.message}
+        type={toast.type}
+        onClose={() => setToast((current) => ({ ...current, open: false }))}
+      />
       <ConfirmDialog
         isOpen={dialogState.isOpen}
         type={dialogState.type}
@@ -198,6 +219,7 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
               url={fullUrl}
               qrCode={deploy.qrCodePath}
               code={deploy.code}
+              onNotify={showToast}
             />
             
             <div className="pt-8 border-t border-gray-100">

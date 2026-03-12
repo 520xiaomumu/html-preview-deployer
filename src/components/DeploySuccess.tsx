@@ -8,12 +8,13 @@ interface DeploySuccessProps {
   url: string;
   qrCode: string;
   code: string;
+  onNotify?: (message: string, type?: 'success' | 'error' | 'info') => void;
 }
 
-export default function DeploySuccess({ url, qrCode, code }: DeploySuccessProps) {
+export default function DeploySuccess({ url, qrCode, code, onNotify }: DeploySuccessProps) {
   const handleCopy = () => {
     navigator.clipboard.writeText(url);
-    alert('链接已复制到剪贴板');
+    onNotify?.('链接已复制到剪贴板', 'success');
   };
 
   return (

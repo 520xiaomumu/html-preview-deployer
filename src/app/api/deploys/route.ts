@@ -10,18 +10,18 @@ export async function GET(request: NextRequest) {
 
     if (error) throw new Error(error.message);
 
-    // Map snake_case to camelCase for frontend compatibility
-    const formattedDeploys = deploys.map(deploy => ({
+    const formattedDeploys = deploys.map((deploy) => ({
       id: deploy.id,
       code: deploy.code,
       title: deploy.title,
       filename: deploy.filename,
       filePath: deploy.file_path,
+      fileSize: deploy.file_size,
       qrCodePath: deploy.qr_code_path,
       createdAt: deploy.created_at,
       updatedAt: deploy.updated_at,
       viewCount: deploy.view_count,
-      status: deploy.status
+      status: deploy.status,
     }));
 
     return NextResponse.json({

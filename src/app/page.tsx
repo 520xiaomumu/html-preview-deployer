@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import FileUpload from '@/components/FileUpload';
 import Preview from '@/components/Preview';
 import DeploySuccess from '@/components/DeploySuccess';
+import Toast from '@/components/Toast';
 import { Rocket, Loader2 } from 'lucide-react';
 
 type InputMode = 'upload' | 'editor';
@@ -24,6 +25,19 @@ export default function Home() {
   const [content, setContent] = useState<string>('');
   const [isDeploying, setIsDeploying] = useState(false);
   const [deployResult, setDeployResult] = useState<DeployResult | null>(null);
+  const [toast, setToast] = useState<{
+    open: boolean;
+    message: string;
+    type: 'success' | 'error' | 'info';
+  }>({
+    open: false,
+    message: '',
+    type: 'info',
+  });
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ open: true, message, type });
+  };
 
   const hasContent = content.trim().length > 0;
   const normalizedFilename = filename.trim() || DEFAULT_FILENAME;
@@ -65,7 +79,7 @@ export default function Home() {
 
   const handleDeploy = async () => {
     if (!hasContent) {
-      alert('请先上传或输入 HTML 内容');
+      showToast('请先上传或输入 HTML 内容', 'error');
       return;
     }
 
@@ -88,11 +102,11 @@ export default function Home() {
       if (data.success) {
         setDeployResult(data);
       } else {
-        alert(`部署失败: ${data.error}`);
+        showToast(`部署失败: ${data.error}`, 'error');
       }
     } catch (error) {
       console.error('Deploy error:', error);
-      alert('部署过程中发生错误');
+      showToast('部署过程中发生错误', 'error');
     } finally {
       setIsDeploying(false);
     }
@@ -101,6 +115,12 @@ export default function Home() {
   if (deployResult) {
     return (
       <div className="space-y-8">
+        <Toast
+          isOpen={toast.open}
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast((current) => ({ ...current, open: false }))}
+        />
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold text-gray-900">部署完成</h1>
           <button
@@ -114,6 +134,7 @@ export default function Home() {
           url={deployResult.url}
           qrCode={deployResult.qrCode}
           code={deployResult.code}
+          onNotify={showToast}
         />
       </div>
     );
@@ -121,6 +142,12 @@ export default function Home() {
 
   return (
     <div className="space-y-8">
+      <Toast
+        isOpen={toast.open}
+        message={toast.message}
+        type={toast.type}
+        onClose={() => setToast((current) => ({ ...current, open: false }))}
+      />
       <div className="text-center mb-12">
         <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight sm:text-5xl mb-4">
           HTML 预览 & 部署工具

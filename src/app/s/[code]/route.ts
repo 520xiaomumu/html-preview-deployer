@@ -7,24 +7,33 @@ export async function GET(
 ) {
   try {
     const { code } = await params;
+    const isPreview = request.nextUrl.searchParams.get('preview') === '1';
     
-    // Check if deployment exists and is active
-    const { data: deployment, error } = await supabase
+    // For preview mode (admin embed), allow inactive deployments too
+    const query = supabase
       .from('deployments')
-      .select('id, file_path, view_count')
-      .eq('code', code)
-      .eq('status', 'active')
-      .single();
+      .select('id, file_path, view_count, status')
+      .eq('code', code);
+    
+    if (!isPreview) {
+      query.eq('status', 'active');
+    }
+    
+    const { data: deployment, error } = await query.single();
 
     if (error || !deployment) {
       return new NextResponse('Deployment not found or inactive', { status: 404 });
     }
 
-    // Increment view count (Optimistic, non-atomic)
-    await supabase
-      .from('deployments')
-      .update({ view_count: (deployment.view_count || 0) + 1 })
-      .eq('id', deployment.id);
+    // Skip view count increment for embed/preview requests
+    if (!isPreview) {
+      const { error: incrementError } = await supabase
+        .rpc('increment_deployment_view_count', { target_id: deployment.id });
+
+      if (incrementError) {
+        console.error('Increment view count error:', incrementError);
+      }
+    }
 
     // Download file content from Storage
     // The file_path in DB is the public URL, e.g. https://.../html/code.html

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db';
 import QRCode from 'qrcode';
-import { randomUUID } from 'crypto';
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,6 +16,7 @@ export async function POST(request: NextRequest) {
 
     // Generate IDs
     const code = Math.random().toString(36).substring(2, 8);
+  const fileSize = Buffer.byteLength(content, 'utf8');
     
     // Determine protocol and host for the deployment URL
     const host = request.headers.get('host') || 'localhost:3000';
@@ -68,6 +68,7 @@ export async function POST(request: NextRequest) {
         title: title || filename,
         filename,
         file_path: htmlPublicUrl, // Storing the public URL for easy access
+        file_size: fileSize,
         qr_code_path: qrPublicUrl,
         status: 'active'
       })

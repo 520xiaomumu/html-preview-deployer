@@ -26,6 +26,7 @@ export interface Deployment {
   title: string;
   filename: string;
   filePath: string;
+  fileSize: number | null;
   qrCodePath: string;
   createdAt: string;
   updatedAt: string;
@@ -40,6 +41,7 @@ export interface DeploymentRow {
   title: string;
   filename: string;
   file_path: string;
+  file_size: number | null;
   qr_code_path: string;
   created_at: string;
   updated_at: string;
