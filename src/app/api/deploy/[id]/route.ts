@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/db';
+import { DeploymentRow, supabase } from '@/lib/db';
+import { mapDeploymentRow } from '@/lib/deployment-mapper';
+import { listHtmlPathsByCode } from '@/lib/storage';
 
 export async function GET(
   request: NextRequest,
@@ -20,20 +22,7 @@ export async function GET(
       );
     }
 
-    // Map fields
-    const formattedDeployment = {
-      id: deployment.id,
-      code: deployment.code,
-      title: deployment.title,
-      filename: deployment.filename,
-      filePath: deployment.file_path,
-      fileSize: deployment.file_size,
-      qrCodePath: deployment.qr_code_path,
-      createdAt: deployment.created_at,
-      updatedAt: deployment.updated_at,
-      viewCount: deployment.view_count,
-      status: deployment.status
-    };
+    const formattedDeployment = mapDeploymentRow(deployment as DeploymentRow);
 
     return NextResponse.json(formattedDeployment);
   } catch (error: any) {
@@ -105,18 +94,12 @@ export async function DELETE(
     const { code } = deployment;
 
     const bucket = supabase.storage.from('deployments');
-    const { data: htmlFiles, error: listError } = await bucket.list('html', {
-      limit: 100,
-      search: code,
-    });
-
-    if (listError) {
+    let htmlPaths: string[] = [];
+    try {
+      htmlPaths = await listHtmlPathsByCode(bucket, code);
+    } catch (listError) {
       console.error('Error listing html files from storage:', listError);
     }
-
-    const htmlPaths = (htmlFiles || [])
-      .filter((item) => item.name.startsWith(`${code}`))
-      .map((item) => `html/${item.name}`);
 
     if (htmlPaths.length === 0) {
       htmlPaths.push(`html/${code}.html`);

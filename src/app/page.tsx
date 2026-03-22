@@ -7,6 +7,7 @@ import Preview from '@/components/Preview';
 import DeploySuccess from '@/components/DeploySuccess';
 import Toast from '@/components/Toast';
 import { Rocket, Loader2 } from 'lucide-react';
+import agentDocs from '@/content/agent-docs.json';
 
 type InputMode = 'upload' | 'editor';
 
@@ -163,17 +164,14 @@ export default function Home() {
           <div className="space-y-2">
             <h2 className="text-lg font-semibold text-blue-900">Agent API 部署通道已开放</h2>
             <p className="text-sm text-blue-800">
-              首选调用方式：<span className="font-semibold">POST /api/deploy + application/json</span>。可直接写入 HTML 代码进行部署，成功后返回上线链接。
+              首选调用方式：<span className="font-semibold">{agentDocs.deployEndpoint}</span>。可直接写入 HTML 代码进行部署，成功后返回上线链接。
             </p>
             <ul className="list-disc pl-5 text-sm text-blue-800 space-y-1">
-              <li>上传文件：先读取文件内容，再放入 JSON 的 content 字段</li>
-              <li>直接写代码：将完整 HTML 字符串写入 content 字段即可</li>
-              <li>支持可选自定义短链：enableCustomCode=true + customCode</li>
-              <li>已知 code 或 url，可通过 /api/deploy/content 读取、下载、更新 HTML</li>
-              <li><span className="font-semibold">不要使用 -F file 或 multipart/form-data</span></li>
-              <li>仅支持单个 HTML 内容，不支持批量部署</li>
-              <li>冷却中返回 429，并提供 retryAfterSeconds</li>
-              <li>错误响应包含 errorCode、stage、detail，便于 Agent 自动重试</li>
+              {agentDocs.homepageHighlights.map((item) => (
+                <li key={item}>
+                  {item.includes('不要使用') ? <span className="font-semibold">{item}</span> : item}
+                </li>
+              ))}
             </ul>
           </div>
           <Link

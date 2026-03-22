@@ -22,7 +22,7 @@ Custom short code rules:
 
 Do NOT use:
 - multipart/form-data
-- curl -F file=@...
+- curl -F file@...
 - batch array payloads
 
 Rate limit:
@@ -38,11 +38,20 @@ Collaboration APIs (known code/url):
   - Optional: title, filename
 
 Success response includes:
-- success, id, code, url, qrCode, requestId, cooldownSeconds, nextAvailableAt
- - customCodeEnabled
+- success, id, code, url, qrCode, requestId, cooldownSeconds, nextAvailableAt, customCodeEnabled
 
 Error response includes:
 - success=false, errorCode, error, detail, hint, docs, stage, requestId
 
 Docs:
 - https://www.htmlcode.fun/api-docs
+
+Homepage highlights:
+- 上传文件：先读取文件内容，再放入 JSON 的 content 字段
+- 直接写代码：将完整 HTML 字符串写入 content 字段即可
+- 支持可选自定义短链：enableCustomCode=true + customCode
+- 已知 code 或 url，可通过 /api/deploy/content 读取、下载、更新 HTML
+- 不要使用 -F file 或 multipart/form-data
+- 仅支持单个 HTML 内容，不支持批量部署
+- 冷却中返回 429，并提供 retryAfterSeconds
+- 错误响应包含 errorCode、stage、detail，便于 Agent 自动重试

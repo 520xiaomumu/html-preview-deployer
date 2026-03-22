@@ -1,60 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db';
 import { randomUUID } from 'crypto';
+import {
+  MAX_HTML_SIZE_BYTES,
+  SHORT_CODE_PATTERN,
+  NO_STORE_CACHE_CONTROL,
+  isValidHtmlContent,
+  resolveCodeFromInput,
+} from '@/lib/deploy-config';
+import { createVersionedHtmlPath, getStoragePathFromFilePath } from '@/lib/storage';
+import { jsonError, withNoStoreHeaders } from '@/lib/api-response';
 
 export const dynamic = 'force-dynamic';
-
-const MAX_HTML_SIZE_BYTES = 1024 * 1024; // 1 MB
-const CODE_PATTERN = /^[a-z0-9](?:[a-z0-9-]{2,30}[a-z0-9])?$/;
-
-type ResolveCodeInput = {
-  code?: unknown;
-  url?: unknown;
-};
-
-function failResponse(options: {
-  status: number;
-  code: string;
-  message: string;
-  detail?: string;
-  requestId: string;
-}) {
-  return NextResponse.json(
-    {
-      success: false,
-      error: options.message,
-      errorCode: options.code,
-      detail: options.detail,
-      requestId: options.requestId,
-    },
-    {
-      status: options.status,
-      headers: {
-        'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
-      },
-    }
-  );
-}
-
-function resolveCode(input: ResolveCodeInput): string | null {
-  if (typeof input.code === 'string' && input.code.trim()) {
-    return input.code.trim().toLowerCase();
-  }
-
-  if (typeof input.url === 'string' && input.url.trim()) {
-    try {
-      const parsed = new URL(input.url.trim());
-      const parts = parsed.pathname.split('/').filter(Boolean);
-      if (parts.length >= 2 && parts[0] === 's') {
-        return parts[1].toLowerCase();
-      }
-    } catch {
-      return null;
-    }
-  }
-
-  return null;
-}
 
 async function fetchDeploymentByCode(code: string) {
   return supabase
@@ -64,24 +21,8 @@ async function fetchDeploymentByCode(code: string) {
     .maybeSingle();
 }
 
-function getStoragePathFromFilePath(filePath: unknown): string | null {
-  if (typeof filePath !== 'string' || !filePath.trim()) return null;
-
-  try {
-    const parsed = new URL(filePath);
-    const marker = '/deployments/';
-    const index = parsed.pathname.indexOf(marker);
-    if (index === -1) return null;
-
-    const path = parsed.pathname.slice(index + marker.length);
-    return path || null;
-  } catch {
-    return null;
-  }
-}
-
 function resolveStoragePath(deployment: { file_path?: string | null }, code: string) {
-  return getStoragePathFromFilePath(deployment.file_path) || `html/${code}.html`;
+  return getStoragePathFromFilePath(deployment.file_path, code);
 }
 
 async function readHtmlContent(storagePath: string) {
@@ -101,13 +42,13 @@ export async function GET(request: NextRequest) {
   const requestId = randomUUID();
 
   try {
-    const code = resolveCode({
+    const code = resolveCodeFromInput({
       code: request.nextUrl.searchParams.get('code'),
       url: request.nextUrl.searchParams.get('url'),
     });
 
-    if (!code || !CODE_PATTERN.test(code)) {
-      return failResponse({
+    if (!code || !SHORT_CODE_PATTERN.test(code)) {
+      return jsonError({
         status: 400,
         code: 'INVALID_CODE_OR_URL',
         message: '请提供有效的 code 或部署 url。',
@@ -118,7 +59,7 @@ export async function GET(request: NextRequest) {
 
     const { data: deployment, error } = await fetchDeploymentByCode(code);
     if (error || !deployment) {
-      return failResponse({
+      return jsonError({
         status: 404,
         code: 'DEPLOYMENT_NOT_FOUND',
         message: '未找到对应部署。',
@@ -130,7 +71,7 @@ export async function GET(request: NextRequest) {
     const storagePath = resolveStoragePath(deployment, code);
     const { error: readError, content } = await readHtmlContent(storagePath);
     if (readError || content == null) {
-      return failResponse({
+      return jsonError({
         status: 404,
         code: 'HTML_CONTENT_NOT_FOUND',
         message: '未找到该部署的 HTML 内容。',
@@ -146,7 +87,7 @@ export async function GET(request: NextRequest) {
         headers: {
           'Content-Type': 'text/html; charset=utf-8',
           'Content-Disposition': `attachment; filename="${downloadFilename}"`,
-          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+          'Cache-Control': NO_STORE_CACHE_CONTROL,
         },
       });
     }
@@ -167,14 +108,10 @@ export async function GET(request: NextRequest) {
         createdAt: deployment.created_at,
         updatedAt: deployment.updated_at,
       },
-      {
-        headers: {
-          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
-        },
-      }
+      withNoStoreHeaders()
     );
   } catch (error: any) {
-    return failResponse({
+    return jsonError({
       status: 500,
       code: 'INTERNAL_ERROR',
       message: '读取部署内容失败。',
@@ -190,7 +127,7 @@ export async function PATCH(request: NextRequest) {
   try {
     const contentType = request.headers.get('content-type') || '';
     if (!contentType.includes('application/json')) {
-      return failResponse({
+      return jsonError({
         status: 415,
         code: 'UNSUPPORTED_CONTENT_TYPE',
         message: '仅支持 application/json 请求。',
@@ -201,7 +138,7 @@ export async function PATCH(request: NextRequest) {
 
     const body = await request.json();
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
-      return failResponse({
+      return jsonError({
         status: 400,
         code: 'INVALID_PAYLOAD',
         message: '请求体必须是单个 JSON 对象。',
@@ -209,9 +146,9 @@ export async function PATCH(request: NextRequest) {
       });
     }
 
-    const code = resolveCode({ code: body.code, url: body.url });
-    if (!code || !CODE_PATTERN.test(code)) {
-      return failResponse({
+    const code = resolveCodeFromInput({ code: body.code, url: body.url });
+    if (!code || !SHORT_CODE_PATTERN.test(code)) {
+      return jsonError({
         status: 400,
         code: 'INVALID_CODE_OR_URL',
         message: '请提供有效的 code 或部署 url。',
@@ -221,7 +158,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (typeof body.content !== 'string' || !body.content.trim()) {
-      return failResponse({
+      return jsonError({
         status: 400,
         code: 'INVALID_CONTENT',
         message: 'content 必须是非空字符串。',
@@ -233,7 +170,7 @@ export async function PATCH(request: NextRequest) {
     const fileSize = Buffer.byteLength(normalizedContent, 'utf8');
 
     if (fileSize > MAX_HTML_SIZE_BYTES) {
-      return failResponse({
+      return jsonError({
         status: 413,
         code: 'FILE_TOO_LARGE',
         message: 'HTML 文件体积超出限制。',
@@ -242,8 +179,8 @@ export async function PATCH(request: NextRequest) {
       });
     }
 
-    if (!/(<!doctype html|<html[\s>])/i.test(normalizedContent)) {
-      return failResponse({
+    if (!isValidHtmlContent(normalizedContent)) {
+      return jsonError({
         status: 400,
         code: 'INVALID_HTML',
         message: '提交内容不是有效的 HTML 文本。',
@@ -254,7 +191,7 @@ export async function PATCH(request: NextRequest) {
 
     const { data: deployment, error } = await fetchDeploymentByCode(code);
     if (error || !deployment) {
-      return failResponse({
+      return jsonError({
         status: 404,
         code: 'DEPLOYMENT_NOT_FOUND',
         message: '未找到对应部署。',
@@ -263,7 +200,7 @@ export async function PATCH(request: NextRequest) {
       });
     }
 
-    const storagePath = `html/${code}-${Date.now()}.html`;
+    const storagePath = createVersionedHtmlPath(code);
     const bucket = supabase.storage.from('deployments');
     const { error: updateFileError } = await bucket.update(storagePath, normalizedContent, {
       contentType: 'text/html',
@@ -277,7 +214,7 @@ export async function PATCH(request: NextRequest) {
       });
 
       if (uploadFallbackError) {
-        return failResponse({
+        return jsonError({
           status: 500,
           code: 'HTML_UPDATE_FAILED',
           message: 'HTML 内容更新失败。',
@@ -310,7 +247,7 @@ export async function PATCH(request: NextRequest) {
     if (typeof body.filename === 'string' && body.filename.trim()) {
       const normalizedFilename = body.filename.trim();
       if (!/\.html?$/i.test(normalizedFilename)) {
-        return failResponse({
+        return jsonError({
           status: 400,
           code: 'INVALID_FILENAME',
           message: 'filename 必须以 .html 或 .htm 结尾。',
@@ -326,7 +263,7 @@ export async function PATCH(request: NextRequest) {
       .eq('id', deployment.id);
 
     if (updateError) {
-      return failResponse({
+      return jsonError({
         status: 500,
         code: 'DEPLOYMENT_UPDATE_FAILED',
         message: '部署记录更新失败。',
@@ -346,14 +283,10 @@ export async function PATCH(request: NextRequest) {
         message: 'HTML 内容已更新。',
         url: `${request.nextUrl.protocol}//${request.nextUrl.host}/s/${code}`,
       },
-      {
-        headers: {
-          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
-        },
-      }
+      withNoStoreHeaders()
     );
   } catch (error: any) {
-    return failResponse({
+    return jsonError({
       status: 500,
       code: 'INTERNAL_ERROR',
       message: '更新部署内容失败。',

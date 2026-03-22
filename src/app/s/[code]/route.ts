@@ -1,29 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db';
-
-const CDN_CACHE_CONTROL = 'public, max-age=0, s-maxage=120, stale-while-revalidate=600';
-const CDN_EDGE_CACHE_CONTROL = 's-maxage=120, stale-while-revalidate=600';
-const NO_STORE_CACHE_CONTROL = 'no-store, no-cache, must-revalidate, max-age=0';
-
-function getStoragePathFromFilePath(filePath: unknown, code: string) {
-  if (typeof filePath !== 'string' || !filePath.trim()) {
-    return `html/${code}.html`;
-  }
-
-  try {
-    const parsed = new URL(filePath);
-    const marker = '/deployments/';
-    const index = parsed.pathname.indexOf(marker);
-    if (index === -1) {
-      return `html/${code}.html`;
-    }
-
-    const resolvedPath = parsed.pathname.slice(index + marker.length);
-    return resolvedPath || `html/${code}.html`;
-  } catch {
-    return `html/${code}.html`;
-  }
-}
+import {
+  CDN_CACHE_CONTROL,
+  CDN_EDGE_CACHE_CONTROL,
+  NO_STORE_CACHE_CONTROL,
+} from '@/lib/deploy-config';
+import { getStoragePathFromFilePath } from '@/lib/storage';
 
 export async function GET(
   request: NextRequest,

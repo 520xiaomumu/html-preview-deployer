@@ -2,10 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db';
 import QRCode from 'qrcode';
 import { randomUUID } from 'crypto';
+import { MAX_HTML_SIZE_BYTES, SHORT_CODE_PATTERN, isValidHtmlContent } from '@/lib/deploy-config';
 
 const COOLDOWN_SECONDS = 10;
-const MAX_HTML_SIZE_BYTES = 1024 * 1024; // 1 MB
-const CUSTOM_CODE_PATTERN = /^[a-z0-9](?:[a-z0-9-]{2,30}[a-z0-9])?$/;
 
 type DeployFailOptions = {
   status: number;
@@ -193,7 +192,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    if (!/(<!doctype html|<html[\s>])/i.test(normalizedContent)) {
+    if (!isValidHtmlContent(normalizedContent)) {
       return failResponse({
         status: 400,
         code: 'INVALID_HTML',
@@ -222,7 +221,7 @@ export async function POST(request: NextRequest) {
       }
 
       const normalizedCustomCode = customCode.trim().toLowerCase();
-      if (!CUSTOM_CODE_PATTERN.test(normalizedCustomCode)) {
+      if (!SHORT_CODE_PATTERN.test(normalizedCustomCode)) {
         return failResponse({
           status: 400,
           code: 'INVALID_CUSTOM_CODE',

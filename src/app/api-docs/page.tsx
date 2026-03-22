@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import agentDocs from '@/content/agent-docs.json';
 
 export default function ApiDocsPage() {
   const sampleRequest = `curl -X POST https://www.htmlcode.fun/api/deploy \\
@@ -65,15 +66,9 @@ export default function ApiDocsPage() {
         <p className="text-sm text-gray-700">部署入口：POST /api/deploy</p>
         <p className="text-sm text-gray-700">内容协作：GET /api/deploy/content、PATCH /api/deploy/content</p>
         <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1">
-          <li>请求头必须为 Content-Type: application/json</li>
-          <li>请传 JSON 对象（filename + content + 可选 title）</li>
-          <li>不要使用 curl -F file 或 multipart/form-data</li>
-          <li>仅支持单个 HTML 请求，不支持批量部署</li>
-          <li>可选开启自定义短链：enableCustomCode=true + customCode</li>
-          <li>已知短链 code 或 url，可读取、下载、更新对应 HTML 内容</li>
-          <li>每次部署成功后，全局冷却 10 秒</li>
-          <li>冷却期间返回 429，并包含 retryAfterSeconds</li>
-          <li>最大 HTML 体积 1 MB</li>
+          {agentDocs.apiRules.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
         </ul>
       </div>
 
@@ -118,7 +113,7 @@ export default function ApiDocsPage() {
           <p className="text-sm font-semibold text-amber-900">常见错误调用（不要这样用）</p>
           <pre className="overflow-auto rounded-md bg-gray-900 p-4 text-xs text-gray-100">curl -L -X POST https://www.htmlcode.fun/api/deploy -F "file=@index.html"</pre>
           <p className="text-sm text-amber-800">
-            如果上传方式不正确，接口会返回结构化错误字段：errorCode、hint、docs、stage、detail、requestId。
+            {agentDocs.commonErrorTip}
           </p>
         </div>
       </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { Trash2, Eye, Calendar, ExternalLink, PowerOff, PlayCircle, Download, Copy, Check, HardDrive, Search } from 'lucide-react';
 import { Deployment } from '@/lib/db';
@@ -29,9 +29,14 @@ function FileSizeInfo({ size }: { size: number | null | undefined }) {
 export default function DeploymentsPage() {
   const [deploys, setDeploys] = useState<Deployment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'latest' | 'oldest' | 'mostViewed' | 'leastViewed'>('latest');
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const pageSize = 12;
   const [toast, setToast] = useState<{
     open: boolean;
     message: string;
@@ -59,30 +64,53 @@ export default function DeploymentsPage() {
 
   // Track which card just had its code copied
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const htmlCacheRef = useRef<Map<string, string>>(new Map());
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setToast({ open: true, message, type });
   };
 
-  const fetchDeploys = async () => {
+  const fetchDeploys = useCallback(async () => {
+    setIsRefreshing(true);
     try {
-      const res = await fetch('/api/deploys');
+      const params = new URLSearchParams({
+        page: String(page),
+        pageSize: String(pageSize),
+        sortBy,
+      });
+
+      if (filter !== 'all') {
+        params.set('status', filter);
+      }
+
+      if (searchTerm.trim()) {
+        params.set('q', searchTerm.trim());
+      }
+
+      const res = await fetch(`/api/deploys?${params.toString()}`);
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error || '获取部署列表失败');
       }
       setDeploys(data.deploys || []);
+      setTotal(data.total || 0);
+      setTotalPages(data.totalPages || 1);
     } catch (error) {
       console.error('Failed to fetch deploys', error);
       showToast('获取部署列表失败，请稍后重试', 'error');
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
-  };
+  }, [filter, page, searchTerm, sortBy]);
 
   useEffect(() => {
     fetchDeploys();
-  }, []);
+  }, [fetchDeploys]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filter, searchTerm, sortBy]);
 
   const closeDialog = () => {
     setDialogState(prev => ({ ...prev, isOpen: false }));
@@ -159,11 +187,29 @@ export default function DeploymentsPage() {
     );
   };
 
+  const fetchDeploymentHtml = useCallback(async (deploy: Deployment) => {
+    const cachedHtml = htmlCacheRef.current.get(deploy.code);
+    if (cachedHtml) {
+      return cachedHtml;
+    }
+
+    const res = await fetch(`/api/deploy/content?code=${encodeURIComponent(deploy.code)}`);
+    if (!res.ok) {
+      throw new Error('获取内容失败');
+    }
+
+    const data = await res.json();
+    if (!data.success || typeof data.content !== 'string') {
+      throw new Error(data.error || '获取内容失败');
+    }
+
+    htmlCacheRef.current.set(deploy.code, data.content);
+    return data.content;
+  }, []);
+
   const handleDownload = useCallback(async (deploy: Deployment) => {
     try {
-      const res = await fetch(deploy.filePath);
-      if (!res.ok) throw new Error('下载失败');
-      const html = await res.text();
+      const html = await fetchDeploymentHtml(deploy);
       const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -177,13 +223,11 @@ export default function DeploymentsPage() {
       console.error('Download error', error);
       showToast('下载失败', 'error');
     }
-  }, []);
+  }, [fetchDeploymentHtml]);
 
   const handleCopyCode = useCallback(async (deploy: Deployment) => {
     try {
-      const res = await fetch(deploy.filePath);
-      if (!res.ok) throw new Error('获取内容失败');
-      const html = await res.text();
+      const html = await fetchDeploymentHtml(deploy);
       await navigator.clipboard.writeText(html);
       setCopiedId(deploy.id);
       showToast('源码已复制到剪贴板', 'success');
@@ -192,33 +236,7 @@ export default function DeploymentsPage() {
       console.error('Copy error', error);
       showToast('复制失败', 'error');
     }
-  }, []);
-
-  const filteredDeploys = deploys
-    .filter(d => {
-      const matchesFilter = filter === 'all' || d.status === filter;
-      const keyword = searchTerm.trim().toLowerCase();
-      const matchesSearch =
-        keyword.length === 0 ||
-        d.title.toLowerCase().includes(keyword) ||
-        d.filename.toLowerCase().includes(keyword) ||
-        d.code.toLowerCase().includes(keyword);
-
-      return matchesFilter && matchesSearch;
-    })
-    .sort((left, right) => {
-      switch (sortBy) {
-        case 'oldest':
-          return new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
-        case 'mostViewed':
-          return right.viewCount - left.viewCount;
-        case 'leastViewed':
-          return left.viewCount - right.viewCount;
-        case 'latest':
-        default:
-          return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
-      }
-    });
+  }, [fetchDeploymentHtml]);
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleString('zh-CN');
@@ -284,16 +302,20 @@ export default function DeploymentsPage() {
         </div>
       </div>
 
-      {filteredDeploys.length === 0 ? (
+      {isRefreshing && !loading && (
+        <p className="text-sm text-gray-500">正在更新列表...</p>
+      )}
+
+      {deploys.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
-          <p className="text-gray-500">{deploys.length === 0 ? '暂无部署记录' : '没有符合条件的部署'}</p>
+          <p className="text-gray-500">暂无部署记录</p>
           <Link href="/" className="text-blue-600 hover:text-blue-800 mt-2 inline-block">
             去部署第一个页面
           </Link>
         </div>
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {filteredDeploys.map((deploy) => (
+          {deploys.map((deploy) => (
             <div key={deploy.id} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow flex flex-col group/card">
               {/* HTML Preview Area */}
               <div className="relative w-full h-64 bg-white border-b border-gray-200 overflow-hidden group/preview">
@@ -438,6 +460,28 @@ export default function DeploymentsPage() {
           ))}
         </div>
       )}
+
+      <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600">
+        <span>第 {page} / {totalPages} 页，共 {total} 条</span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setPage((current) => Math.max(1, current - 1))}
+            disabled={page <= 1 || isRefreshing}
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            上一页
+          </button>
+          <button
+            type="button"
+            onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+            disabled={page >= totalPages || isRefreshing}
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            下一页
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
