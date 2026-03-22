@@ -61,14 +61,6 @@ export async function GET(
         });
     }
 
-    if (!isPreview && typeof deployment.file_path === 'string' && deployment.file_path.trim()) {
-      const response = NextResponse.redirect(deployment.file_path.trim(), 307);
-      response.headers.set('Cache-Control', CDN_CACHE_CONTROL);
-      response.headers.set('CDN-Cache-Control', CDN_EDGE_CACHE_CONTROL);
-      response.headers.set('Vercel-CDN-Cache-Control', CDN_EDGE_CACHE_CONTROL);
-      return response;
-    }
-
     const storagePath = getStoragePathFromFilePath(deployment.file_path, code);
     const { data: fileData, error: downloadError } = await supabase.storage
       .from('deployments')
