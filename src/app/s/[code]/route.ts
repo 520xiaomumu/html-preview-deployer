@@ -1,6 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db';
 
+function getStoragePathFromFilePath(filePath: unknown, code: string) {
+  if (typeof filePath !== 'string' || !filePath.trim()) {
+    return `html/${code}.html`;
+  }
+
+  try {
+    const parsed = new URL(filePath);
+    const marker = '/deployments/';
+    const index = parsed.pathname.indexOf(marker);
+    if (index === -1) {
+      return `html/${code}.html`;
+    }
+
+    const resolvedPath = parsed.pathname.slice(index + marker.length);
+    return resolvedPath || `html/${code}.html`;
+  } catch {
+    return `html/${code}.html`;
+  }
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ code: string }> }
@@ -35,12 +55,7 @@ export async function GET(
       }
     }
 
-    // Download file content from Storage
-    // The file_path in DB is the public URL, e.g. https://.../html/code.html
-    // We can just download it using fetch, OR use storage download if we know the path.
-    // We stored it as `html/${code}.html`.
-    
-    const storagePath = `html/${code}.html`;
+    const storagePath = getStoragePathFromFilePath(deployment.file_path, code);
     const { data: fileData, error: downloadError } = await supabase.storage
       .from('deployments')
       .download(storagePath);

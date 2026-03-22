@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db';
 import { randomUUID } from 'crypto';
 
+export const dynamic = 'force-dynamic';
+
 const MAX_HTML_SIZE_BYTES = 1024 * 1024; // 1 MB
 const CODE_PATTERN = /^[a-z0-9](?:[a-z0-9-]{2,30}[a-z0-9])?$/;
 
@@ -25,7 +27,12 @@ function failResponse(options: {
       detail: options.detail,
       requestId: options.requestId,
     },
-    { status: options.status }
+    {
+      status: options.status,
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+      },
+    }
   );
 }
 
@@ -57,8 +64,27 @@ async function fetchDeploymentByCode(code: string) {
     .maybeSingle();
 }
 
-async function readHtmlContent(code: string) {
-  const storagePath = `html/${code}.html`;
+function getStoragePathFromFilePath(filePath: unknown): string | null {
+  if (typeof filePath !== 'string' || !filePath.trim()) return null;
+
+  try {
+    const parsed = new URL(filePath);
+    const marker = '/deployments/';
+    const index = parsed.pathname.indexOf(marker);
+    if (index === -1) return null;
+
+    const path = parsed.pathname.slice(index + marker.length);
+    return path || null;
+  } catch {
+    return null;
+  }
+}
+
+function resolveStoragePath(deployment: { file_path?: string | null }, code: string) {
+  return getStoragePathFromFilePath(deployment.file_path) || `html/${code}.html`;
+}
+
+async function readHtmlContent(storagePath: string) {
   const { data: fileData, error: downloadError } = await supabase.storage
     .from('deployments')
     .download(storagePath);
@@ -101,7 +127,8 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const { error: readError, content } = await readHtmlContent(code);
+    const storagePath = resolveStoragePath(deployment, code);
+    const { error: readError, content } = await readHtmlContent(storagePath);
     if (readError || content == null) {
       return failResponse({
         status: 404,
@@ -119,25 +146,33 @@ export async function GET(request: NextRequest) {
         headers: {
           'Content-Type': 'text/html; charset=utf-8',
           'Content-Disposition': `attachment; filename="${downloadFilename}"`,
+          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
         },
       });
     }
 
-    return NextResponse.json({
-      success: true,
-      requestId,
-      id: deployment.id,
-      code: deployment.code,
-      status: deployment.status,
-      title: deployment.title,
-      filename: deployment.filename,
-      url: `${request.nextUrl.protocol}//${request.nextUrl.host}/s/${deployment.code}`,
-      filePath: deployment.file_path,
-      fileSize: deployment.file_size,
-      content,
-      createdAt: deployment.created_at,
-      updatedAt: deployment.updated_at,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        requestId,
+        id: deployment.id,
+        code: deployment.code,
+        status: deployment.status,
+        title: deployment.title,
+        filename: deployment.filename,
+        url: `${request.nextUrl.protocol}//${request.nextUrl.host}/s/${deployment.code}`,
+        filePath: deployment.file_path,
+        fileSize: deployment.file_size,
+        content,
+        createdAt: deployment.created_at,
+        updatedAt: deployment.updated_at,
+      },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+        },
+      }
+    );
   } catch (error: any) {
     return failResponse({
       status: 500,
@@ -228,22 +263,28 @@ export async function PATCH(request: NextRequest) {
       });
     }
 
-    const storagePath = `html/${code}.html`;
-    const { error: uploadError } = await supabase.storage
-      .from('deployments')
-      .upload(storagePath, normalizedContent, {
+    const storagePath = `html/${code}-${Date.now()}.html`;
+    const bucket = supabase.storage.from('deployments');
+    const { error: updateFileError } = await bucket.update(storagePath, normalizedContent, {
+      contentType: 'text/html',
+      upsert: true,
+    });
+
+    if (updateFileError) {
+      const { error: uploadFallbackError } = await bucket.upload(storagePath, normalizedContent, {
         contentType: 'text/html',
         upsert: true,
       });
 
-    if (uploadError) {
-      return failResponse({
-        status: 500,
-        code: 'HTML_UPDATE_FAILED',
-        message: 'HTML 内容更新失败。',
-        detail: uploadError.message,
-        requestId,
-      });
+      if (uploadFallbackError) {
+        return failResponse({
+          status: 500,
+          code: 'HTML_UPDATE_FAILED',
+          message: 'HTML 内容更新失败。',
+          detail: `${updateFileError.message}; fallback: ${uploadFallbackError.message}`,
+          requestId,
+        });
+      }
     }
 
     const updates: {
@@ -251,10 +292,16 @@ export async function PATCH(request: NextRequest) {
       updated_at: string;
       title?: string;
       filename?: string;
+      file_path?: string;
     } = {
       file_size: fileSize,
       updated_at: new Date().toISOString(),
     };
+
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from('deployments').getPublicUrl(storagePath);
+    updates.file_path = publicUrl;
 
     if (typeof body.title === 'string' && body.title.trim()) {
       updates.title = body.title.trim();
@@ -288,16 +335,23 @@ export async function PATCH(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({
-      success: true,
-      requestId,
-      id: deployment.id,
-      code,
-      updatedAt: updates.updated_at,
-      fileSize,
-      message: 'HTML 内容已更新。',
-      url: `${request.nextUrl.protocol}//${request.nextUrl.host}/s/${code}`,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        requestId,
+        id: deployment.id,
+        code,
+        updatedAt: updates.updated_at,
+        fileSize,
+        message: 'HTML 内容已更新。',
+        url: `${request.nextUrl.protocol}//${request.nextUrl.host}/s/${code}`,
+      },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+        },
+      }
+    );
   } catch (error: any) {
     return failResponse({
       status: 500,

@@ -104,14 +104,27 @@ export async function DELETE(
 
     const { code } = deployment;
 
-    // Delete files from Storage
-    // Paths are known based on code
-    const htmlPath = `html/${code}.html`;
+    const bucket = supabase.storage.from('deployments');
+    const { data: htmlFiles, error: listError } = await bucket.list('html', {
+      limit: 100,
+      search: code,
+    });
+
+    if (listError) {
+      console.error('Error listing html files from storage:', listError);
+    }
+
+    const htmlPaths = (htmlFiles || [])
+      .filter((item) => item.name.startsWith(`${code}`))
+      .map((item) => `html/${item.name}`);
+
+    if (htmlPaths.length === 0) {
+      htmlPaths.push(`html/${code}.html`);
+    }
+
     const qrPath = `qrcodes/${code}.png`;
 
-    const { error: storageError } = await supabase.storage
-      .from('deployments')
-      .remove([htmlPath, qrPath]);
+    const { error: storageError } = await bucket.remove([...htmlPaths, qrPath]);
       
     if (storageError) {
       console.error('Error deleting files from storage:', storageError);
