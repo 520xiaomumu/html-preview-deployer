@@ -97,6 +97,8 @@ export default function DeploymentMarketplace({
             copyFailed: '复制失败',
             likeSuccess: '点赞成功，项目内容已锁定',
             likeFailed: '点赞失败',
+            unlikeSuccess: '已取消点赞',
+            unlikeFailed: '取消点赞失败',
             fileSizeTooltip: 'HTML 文件大小',
             previewLabel: '预览',
             previewOpen: '打开预览',
@@ -111,7 +113,7 @@ export default function DeploymentMarketplace({
             detailTitle: '查看详情',
             visitPage: '访问页面',
             likeProject: '点赞并锁定项目',
-            likedProject: '已点赞',
+            likedProject: '取消点赞',
             lockedProject: '已被点赞锁定，不能修改或删除',
             downloadHtml: '下载 HTML 文件',
             copyCode: '复制代码',
@@ -162,6 +164,8 @@ export default function DeploymentMarketplace({
             copyFailed: 'Copy failed',
             likeSuccess: 'Liked. This project is now locked.',
             likeFailed: 'Failed to like',
+            unlikeSuccess: 'Like removed',
+            unlikeFailed: 'Failed to remove like',
             fileSizeTooltip: 'HTML file size',
             previewLabel: 'Preview',
             previewOpen: 'Open Preview',
@@ -176,7 +180,7 @@ export default function DeploymentMarketplace({
             detailTitle: 'View details',
             visitPage: 'Visit page',
             likeProject: 'Like and lock project',
-            likedProject: 'Liked',
+            likedProject: 'Remove like',
             lockedProject: 'Locked by likes. It cannot be changed or deleted.',
             downloadHtml: 'Download HTML',
             copyCode: 'Copy source',
@@ -423,36 +427,47 @@ export default function DeploymentMarketplace({
 
   const handleLike = useCallback(
     async (deploy: Deployment) => {
-      if (likedIds.has(deploy.id) || deploy.status !== 'active') return;
+      if (deploy.status !== 'active') return;
+
+      const alreadyLiked = likedIds.has(deploy.id);
 
       try {
         const res = await fetch(`/api/deploy/${deploy.id}/like`, {
-          method: 'POST',
+          method: alreadyLiked ? 'DELETE' : 'POST',
         });
         const data = await res.json();
 
         if (!res.ok || !data.success) {
-          throw new Error(data.error || text.likeFailed);
+          throw new Error(data.error || (alreadyLiked ? text.unlikeFailed : text.likeFailed));
         }
 
         setDeploys((current) =>
           current.map((item) =>
             item.id === deploy.id
-              ? { ...item, likeCount: Number(data.likeCount ?? item.likeCount + 1) }
+              ? {
+                  ...item,
+                  likeCount: Number(
+                    data.likeCount ?? (alreadyLiked ? Math.max(item.likeCount - 1, 0) : item.likeCount + 1),
+                  ),
+                }
               : item,
           ),
         );
 
         const nextLikedIds = new Set(likedIds);
-        nextLikedIds.add(deploy.id);
+        if (alreadyLiked) {
+          nextLikedIds.delete(deploy.id);
+        } else {
+          nextLikedIds.add(deploy.id);
+        }
         persistLikedIds(nextLikedIds);
-        showToast(text.likeSuccess, 'success');
+        showToast(alreadyLiked ? text.unlikeSuccess : text.likeSuccess, 'success');
       } catch (error) {
         console.error('Like error', error);
-        showToast(text.likeFailed, 'error');
+        showToast(alreadyLiked ? text.unlikeFailed : text.likeFailed, 'error');
       }
     },
-    [likedIds, text.likeFailed, text.likeSuccess],
+    [likedIds, text.likeFailed, text.likeSuccess, text.unlikeFailed, text.unlikeSuccess],
   );
 
   const formatDate = (dateStr: string) => {
@@ -633,7 +648,6 @@ export default function DeploymentMarketplace({
                       <button
                         type="button"
                         onClick={() => handleLike(deploy)}
-                        disabled={likedIds.has(deploy.id)}
                         className={`rounded-md p-2 transition-colors ${
                           likedIds.has(deploy.id)
                             ? 'text-rose-500'

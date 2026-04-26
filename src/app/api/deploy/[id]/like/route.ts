@@ -95,3 +95,76 @@ export async function POST(
     });
   }
 }
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    if (!isSameOriginBrowserRequest(request)) {
+      return jsonError({
+        status: 403,
+        code: 'MANUAL_UNLIKE_REQUIRED',
+        message: '取消点赞只能从网页内手动操作。',
+      });
+    }
+
+    const { id } = await params;
+    const { data: deployment, error: fetchError } = await supabase
+      .from('deployments')
+      .select('id, like_count')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (isMissingLikeCountError(fetchError)) {
+      return jsonError({
+        status: 503,
+        code: 'LIKE_MIGRATION_REQUIRED',
+        message: '点赞功能还没完成数据库升级。',
+        detail: '请先执行 npm run supabase:db:push，将 like_count 字段推到 Supabase。',
+      });
+    }
+
+    if (fetchError || !deployment) {
+      return jsonError({
+        status: 404,
+        code: 'DEPLOYMENT_NOT_FOUND',
+        message: '未找到对应部署。',
+        detail: fetchError?.message,
+      });
+    }
+
+    const { data: likeCount, error: unlikeError } = await supabase.rpc(
+      'decrement_deployment_like_count',
+      { target_id: id }
+    );
+
+    if (unlikeError) {
+      return jsonError({
+        status: 500,
+        code: 'UNLIKE_FAILED',
+        message: '取消点赞失败。',
+        detail: unlikeError.message,
+      });
+    }
+
+    const resolvedLikeCount = Number(likeCount ?? deployment.like_count ?? 0);
+
+    return NextResponse.json(
+      {
+        success: true,
+        id,
+        likeCount: resolvedLikeCount,
+        locked: resolvedLikeCount > 0,
+      },
+      withNoStoreHeaders()
+    );
+  } catch (error: unknown) {
+    return jsonError({
+      status: 500,
+      code: 'INTERNAL_ERROR',
+      message: '取消点赞失败。',
+      detail: getErrorMessage(error),
+    });
+  }
+}
