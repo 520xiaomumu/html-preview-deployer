@@ -2,13 +2,27 @@
 
 import React, { useState, useCallback } from 'react';
 import { Upload } from 'lucide-react';
+import { useLanguage } from '@/components/LanguageProvider';
 
 interface FileUploadProps {
   onFileSelect: (file: File, content: string) => void;
 }
 
 export default function FileUpload({ onFileSelect }: FileUploadProps) {
+  const { isZh } = useLanguage();
   const [isDragging, setIsDragging] = useState(false);
+
+  const text = isZh
+    ? {
+        invalidFile: '请上传 HTML 文件',
+        clickOrDrag: '点击或拖拽上传 HTML 文件',
+        formatTip: '支持 .html, .htm 格式',
+      }
+    : {
+        invalidFile: 'Please upload an HTML file',
+        clickOrDrag: 'Click or drag to upload an HTML file',
+        formatTip: 'Supports .html and .htm formats',
+      };
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -29,9 +43,9 @@ export default function FileUpload({ onFileSelect }: FileUploadProps) {
       };
       reader.readAsText(file);
     } else {
-      alert('Please upload an HTML file');
+      alert(text.invalidFile);
     }
-  }, [onFileSelect]);
+  }, [onFileSelect, text.invalidFile]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -68,10 +82,10 @@ export default function FileUpload({ onFileSelect }: FileUploadProps) {
       <label htmlFor="file-upload" className="cursor-pointer flex flex-col items-center">
         <Upload className={`w-12 h-12 mb-4 ${isDragging ? 'text-blue-500' : 'text-gray-400'}`} />
         <p className="text-lg font-medium text-gray-700">
-          点击或拖拽上传 HTML 文件
+          {text.clickOrDrag}
         </p>
         <p className="text-sm text-gray-500 mt-2">
-          支持 .html, .htm 格式
+          {text.formatTip}
         </p>
       </label>
     </div>

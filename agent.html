@@ -1,0 +1,986 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Universal Agent</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --panel: #121d34;
+      --border: #2a3b63;
+      --text: #e7efff;
+      --muted: #9fb0d4;
+      --input: #0a1428;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --ok: #14b882;
+      --warn: #f7b955;
+      --err: #ff6b6b;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Arial, sans-serif;
+      background: linear-gradient(180deg, #0a1020, #0b1220);
+      color: var(--text);
+    }
+    .wrap { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+    }
+    .top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    h1 { margin: 0; font-size: 22px; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .actions { display: flex; gap: 8px; }
+
+    button {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #1a2a4a;
+      color: var(--text);
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    button:hover { background: #223a66; }
+    button.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+    button.primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+    button.sub { background: #172744; }
+
+    .chat {
+      min-height: 460px;
+      max-height: 60vh;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      background: var(--input);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .bubble {
+      max-width: 86%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      white-space: pre-wrap;
+      line-height: 1.45;
+      word-break: break-word;
+      font-size: 14px;
+    }
+    .bubble.you { align-self: flex-end; background: #1f4fb2; color: #fff; }
+    .bubble.ai { align-self: flex-start; background: #16335a; border: 1px solid #2e4f80; }
+
+    .composer { margin-top: 12px; display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+    textarea, input, select {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--input);
+      color: var(--text);
+      padding: 10px 12px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+    textarea { min-height: 54px; resize: vertical; }
+    .tiny { color: var(--muted); font-size: 12px; margin-top: 6px; }
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.55);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      z-index: 50;
+    }
+    .overlay.open { display: flex; }
+    .modal {
+      width: min(980px, 96vw);
+      max-height: 88vh;
+      overflow: auto;
+      background: #0f1c34;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .panel {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      background: #0a1428;
+    }
+    .panel h3 { margin: 0 0 8px; font-size: 14px; color: #c9daff; }
+    .list { display: flex; flex-direction: column; gap: 8px; }
+    .item {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #111f3a;
+      padding: 10px;
+    }
+    .item-head { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; margin-bottom: 8px; }
+    .tool { display: flex; gap: 6px; }
+    .tool button { padding: 4px 8px; font-size: 12px; border-radius: 8px; }
+    .footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+
+    .log {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #081125;
+      height: 340px;
+      overflow: auto;
+      padding: 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .ok { color: var(--ok); }
+    .warn { color: var(--warn); }
+    .err { color: var(--err); }
+
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: 1fr; }
+      .composer { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="card">
+      <div class="top">
+        <div>
+          <h1>Universal Agent</h1>
+          <div class="muted" id="activeSummary">当前模型: DeepSeek / deepseek-chat</div>
+        </div>
+        <div class="actions">
+          <button class="sub" id="openConfig">模型配置</button>
+          <button class="sub" id="openLogs">日志诊断</button>
+        </div>
+      </div>
+
+      <div class="chat" id="chat"></div>
+
+      <div class="composer">
+        <textarea id="input" placeholder="输入你的指令，例如：帮我调用某网站 API 并给出结果摘要"></textarea>
+        <button class="primary" id="send">发送指令</button>
+      </div>
+      <div class="tiny">支持工具调用：站点探查、API 文档发现、通用 HTTP JSON 请求、可选 CORS 预检诊断。</div>
+    </section>
+  </div>
+
+  <div class="overlay" id="configOverlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Agent 配置</h2>
+        <button id="closeConfig">关闭</button>
+      </div>
+
+      <div class="grid">
+        <section class="panel">
+          <h3>模型厂商配置（可增删重排）</h3>
+          <div class="tiny">服务商类型默认 OpenAI 兼容。DeepSeek 可直接使用 https://api.deepseek.com。</div>
+          <div class="list" id="providerList"></div>
+          <div class="footer">
+            <button id="addProvider">+ 新增厂商</button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h3>提示词模板（可增删重排）</h3>
+          <div class="list" id="promptList"></div>
+          <div class="footer">
+            <button id="addPrompt">+ 新增提示词</button>
+          </div>
+        </section>
+      </div>
+
+      <section class="panel" style="margin-top:12px;">
+        <h3>通用诊断设置</h3>
+        <div class="tiny">可选：填写一个目标 URL 进行 CORS 检查。留空则不检查。</div>
+        <div style="display:grid; grid-template-columns: 1fr auto; gap:8px; margin-top:8px;">
+          <input id="corsUrl" placeholder="例如: https://example.com/api/ping (可空)" />
+          <button id="testCorsBtn">测试 CORS</button>
+        </div>
+      </section>
+
+      <div class="footer">
+        <button id="saveConfig" class="primary">保存配置</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay" id="logsOverlay">
+    <div class="modal" style="max-width:820px;">
+      <div class="modal-header">
+        <h2>后台日志</h2>
+        <button id="closeLogs">关闭</button>
+      </div>
+      <div class="log" id="log"></div>
+      <div class="footer">
+        <button id="copyLogs">复制日志</button>
+        <button id="clearLogs">清空日志</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'universal-agent-config-v2';
+    const chatEl = document.getElementById('chat');
+    const logEl = document.getElementById('log');
+
+    function defaultConfig() {
+      return {
+        activeProviderId: 'p1',
+        providers: [
+          {
+            id: 'p1',
+            name: 'DeepSeek (默认)',
+            baseUrl: 'https://api.deepseek.com',
+            apiKey: '',
+            model: 'deepseek-chat',
+          },
+        ],
+        activePromptId: 't1',
+        prompts: [
+          {
+            id: 't1',
+            name: '通用助手提示词',
+            content: '你是一个通用 Web Agent。优先用中文回答，简洁、可执行。需要时调用工具访问 Web API，并先验证参数与失败原因。',
+          },
+        ],
+        corsCheckUrl: '',
+      };
+    }
+
+    function sanitizeText(text) {
+      return String(text || '').replace(/\b(?:https?:\/\/)?(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)+\b/gi, '目标站点');
+    }
+
+    let state = loadConfig();
+
+    function loadConfig() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return defaultConfig();
+        const parsed = JSON.parse(raw);
+        const base = defaultConfig();
+        const next = Object.assign({}, base, parsed || {});
+
+        const providers = Array.isArray(next.providers) && next.providers.length
+          ? next.providers
+          : base.providers;
+
+        const prompts = Array.isArray(next.prompts) && next.prompts.length
+          ? next.prompts
+          : base.prompts;
+
+        next.providers = providers.map((p, idx) => ({
+          id: p.id || `p${idx + 1}`,
+          name: sanitizeText(p.name || `Provider ${idx + 1}`),
+          baseUrl: String(p.baseUrl || ''),
+          apiKey: String(p.apiKey || ''),
+          model: String(p.model || ''),
+        }));
+
+        next.prompts = prompts.map((t, idx) => ({
+          id: t.id || `t${idx + 1}`,
+          name: sanitizeText(t.name || `Prompt ${idx + 1}`),
+          content: sanitizeText(t.content || ''),
+        }));
+
+        if (!next.providers.find((p) => p.id === next.activeProviderId)) {
+          next.activeProviderId = next.providers[0].id;
+        }
+        if (!next.prompts.find((p) => p.id === next.activePromptId)) {
+          next.activePromptId = next.prompts[0].id;
+        }
+
+        next.corsCheckUrl = String(next.corsCheckUrl || '');
+        return next;
+      } catch {
+        return defaultConfig();
+      }
+    }
+
+    function saveConfigToStorage() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+
+    function now() {
+      return new Date().toISOString().slice(11, 19);
+    }
+
+    function log(msg, cls) {
+      const line = document.createElement('div');
+      line.textContent = `[${now()}] ${msg}`;
+      if (cls) line.className = cls;
+      logEl.appendChild(line);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function bubble(text, who) {
+      const div = document.createElement('div');
+      div.className = `bubble ${who === 'you' ? 'you' : 'ai'}`;
+      div.textContent = text;
+      chatEl.appendChild(div);
+      chatEl.scrollTop = chatEl.scrollHeight;
+    }
+
+    function uid(prefix) {
+      return `${prefix}${Math.random().toString(36).slice(2, 10)}`;
+    }
+
+    function activeProvider() {
+      return state.providers.find((p) => p.id === state.activeProviderId) || state.providers[0];
+    }
+
+    function activePrompt() {
+      return state.prompts.find((t) => t.id === state.activePromptId) || state.prompts[0];
+    }
+
+    function updateSummary() {
+      const p = activeProvider();
+      const summary = document.getElementById('activeSummary');
+      summary.textContent = `当前模型: ${p.name} / ${p.model}`;
+    }
+
+    function moveItem(arr, index, dir) {
+      const next = index + dir;
+      if (next < 0 || next >= arr.length) return;
+      const temp = arr[index];
+      arr[index] = arr[next];
+      arr[next] = temp;
+    }
+
+    function renderProviders() {
+      const box = document.getElementById('providerList');
+      box.innerHTML = '';
+
+      state.providers.forEach((provider, index) => {
+        const item = document.createElement('div');
+        item.className = 'item';
+        item.innerHTML = `
+          <div class="item-head">
+            <select data-role="pick" data-id="${provider.id}">
+              <option value="0" ${state.activeProviderId === provider.id ? 'selected' : ''}>设为当前</option>
+            </select>
+            <div class="tool">
+              <button data-role="up" data-id="${provider.id}">↑</button>
+              <button data-role="down" data-id="${provider.id}">↓</button>
+              <button data-role="del" data-id="${provider.id}">删</button>
+            </div>
+          </div>
+          <input data-field="name" data-id="${provider.id}" value="${provider.name}" placeholder="厂商名称" />
+          <input data-field="baseUrl" data-id="${provider.id}" value="${provider.baseUrl}" placeholder="OpenAI 兼容 Base URL" style="margin-top:6px;" />
+          <input data-field="apiKey" data-id="${provider.id}" value="${provider.apiKey}" placeholder="API Key" style="margin-top:6px;" />
+          <input data-field="model" data-id="${provider.id}" value="${provider.model}" placeholder="模型 ID" style="margin-top:6px;" />
+        `;
+        box.appendChild(item);
+
+        item.querySelector('[data-role="pick"]').addEventListener('change', () => {
+          state.activeProviderId = provider.id;
+          updateSummary();
+        });
+
+        item.querySelector('[data-role="up"]').addEventListener('click', () => {
+          moveItem(state.providers, index, -1);
+          renderProviders();
+        });
+
+        item.querySelector('[data-role="down"]').addEventListener('click', () => {
+          moveItem(state.providers, index, 1);
+          renderProviders();
+        });
+
+        item.querySelector('[data-role="del"]').addEventListener('click', () => {
+          if (state.providers.length <= 1) {
+            alert('至少保留一个模型厂商');
+            return;
+          }
+          state.providers = state.providers.filter((x) => x.id !== provider.id);
+          if (state.activeProviderId === provider.id) {
+            state.activeProviderId = state.providers[0].id;
+          }
+          renderProviders();
+          updateSummary();
+        });
+
+        item.querySelectorAll('[data-field]').forEach((input) => {
+          input.addEventListener('input', (e) => {
+            const field = e.target.getAttribute('data-field');
+            provider[field] = e.target.value;
+            if (provider.id === state.activeProviderId) updateSummary();
+          });
+        });
+      });
+    }
+
+    function renderPrompts() {
+      const box = document.getElementById('promptList');
+      box.innerHTML = '';
+
+      state.prompts.forEach((prompt, index) => {
+        const item = document.createElement('div');
+        item.className = 'item';
+        item.innerHTML = `
+          <div class="item-head">
+            <select data-role="pick" data-id="${prompt.id}">
+              <option value="0" ${state.activePromptId === prompt.id ? 'selected' : ''}>设为当前</option>
+            </select>
+            <div class="tool">
+              <button data-role="up" data-id="${prompt.id}">↑</button>
+              <button data-role="down" data-id="${prompt.id}">↓</button>
+              <button data-role="del" data-id="${prompt.id}">删</button>
+            </div>
+          </div>
+          <input data-field="name" data-id="${prompt.id}" value="${prompt.name}" placeholder="提示词名称" />
+          <textarea data-field="content" data-id="${prompt.id}" style="margin-top:6px; min-height:96px;">${prompt.content}</textarea>
+        `;
+        box.appendChild(item);
+
+        item.querySelector('[data-role="pick"]').addEventListener('change', () => {
+          state.activePromptId = prompt.id;
+        });
+
+        item.querySelector('[data-role="up"]').addEventListener('click', () => {
+          moveItem(state.prompts, index, -1);
+          renderPrompts();
+        });
+
+        item.querySelector('[data-role="down"]').addEventListener('click', () => {
+          moveItem(state.prompts, index, 1);
+          renderPrompts();
+        });
+
+        item.querySelector('[data-role="del"]').addEventListener('click', () => {
+          if (state.prompts.length <= 1) {
+            alert('至少保留一个提示词');
+            return;
+          }
+          state.prompts = state.prompts.filter((x) => x.id !== prompt.id);
+          if (state.activePromptId === prompt.id) {
+            state.activePromptId = state.prompts[0].id;
+          }
+          renderPrompts();
+        });
+
+        item.querySelectorAll('[data-field]').forEach((input) => {
+          input.addEventListener('input', (e) => {
+            const field = e.target.getAttribute('data-field');
+            prompt[field] = e.target.value;
+          });
+        });
+      });
+    }
+
+    async function safeFetch(url, init) {
+      try {
+        const res = await fetch(url, init);
+        return { ok: true, res };
+      } catch (error) {
+        return { ok: false, error };
+      }
+    }
+
+    function normalizeUrl(raw) {
+      const text = String(raw || '').trim();
+      if (!text) return '';
+      if (/^https?:\/\//i.test(text)) return text;
+      return `https://${text}`;
+    }
+
+    function buildProxyUrl(url) {
+      const normalized = normalizeUrl(url).replace(/^https?:\/\//i, '');
+      return `https://r.jina.ai/http://${normalized}`;
+    }
+
+    function extractLinks(html, baseUrl) {
+      const links = [];
+      const re = /href=["']([^"']+)["']/gi;
+      let m;
+      while ((m = re.exec(html)) && links.length < 20) {
+        const href = m[1];
+        if (!href || href.startsWith('#') || href.startsWith('javascript:')) continue;
+        try {
+          const abs = new URL(href, baseUrl).toString();
+          links.push(abs);
+        } catch {}
+      }
+      return Array.from(new Set(links));
+    }
+
+    async function fetchTextWithFallback(url) {
+      const target = normalizeUrl(url);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 12000);
+
+      try {
+        const direct = await safeFetch(target, {
+          method: 'GET',
+          signal: controller.signal,
+          headers: {
+            Accept: 'text/html,application/json,text/plain,*/*',
+          },
+        });
+
+        if (direct.ok) {
+          const text = await direct.res.text();
+          return {
+            success: true,
+            source: 'direct',
+            status: direct.res.status,
+            contentType: direct.res.headers.get('content-type') || '',
+            text,
+            links: extractLinks(text, target),
+          };
+        }
+      } catch {}
+      finally {
+        clearTimeout(timer);
+      }
+
+      const proxyUrl = buildProxyUrl(target);
+      const proxy = await safeFetch(proxyUrl, {
+        method: 'GET',
+        headers: { Accept: 'text/plain,*/*' },
+      });
+
+      if (!proxy.ok) {
+        return {
+          success: false,
+          source: 'none',
+          error: String(proxy.error),
+        };
+      }
+
+      const text = await proxy.res.text();
+      return {
+        success: true,
+        source: 'proxy',
+        status: proxy.res.status,
+        contentType: proxy.res.headers.get('content-type') || '',
+        text,
+        links: extractLinks(text, target),
+      };
+    }
+
+    async function discoverApiDocs(siteUrl) {
+      const site = normalizeUrl(siteUrl);
+      const paths = [
+        '',
+        '/api-docs',
+        '/api/docs',
+        '/docs',
+        '/llms.txt',
+        '/openapi.json',
+        '/swagger.json',
+      ];
+
+      const findings = [];
+      for (const p of paths) {
+        const url = site.replace(/\/$/, '') + p;
+        const r = await fetchTextWithFallback(url);
+        if (!r.success) continue;
+
+        const text = String(r.text || '');
+        const lower = text.toLowerCase();
+        const hit = lower.includes('/api/') || lower.includes('openapi') || lower.includes('swagger') || lower.includes('endpoint');
+        findings.push({
+          url,
+          source: r.source,
+          status: r.status,
+          contentType: r.contentType,
+          hasApiSignal: hit,
+          preview: text.slice(0, 400),
+          links: (r.links || []).slice(0, 10),
+        });
+      }
+
+      const best = findings.filter((x) => x.hasApiSignal);
+      return {
+        success: true,
+        site,
+        docs: best.length ? best : findings,
+      };
+    }
+
+    async function corsProbe(url, method = 'POST') {
+      log(`CORS 诊断开始 -> ${url}`);
+      const r = await safeFetch(url, {
+        method: 'OPTIONS',
+        headers: {
+          Origin: 'https://agent-test.example',
+          'Access-Control-Request-Method': method,
+          'Access-Control-Request-Headers': 'content-type,authorization',
+        },
+      });
+
+      if (!r.ok) {
+        log(`CORS 诊断失败: ${String(r.error)}`, 'err');
+        return { ok: false, error: String(r.error) };
+      }
+
+      const data = {
+        status: r.res.status,
+        allowOrigin: r.res.headers.get('access-control-allow-origin') || '',
+        allowMethods: r.res.headers.get('access-control-allow-methods') || '',
+        allowHeaders: r.res.headers.get('access-control-allow-headers') || '',
+      };
+      log(`CORS 诊断结果: ${JSON.stringify(data)}`, r.res.ok ? 'ok' : 'warn');
+      return { ok: true, ...data };
+    }
+
+    async function toolCall(name, args) {
+      if (name === 'browse_site') {
+        const out = await fetchTextWithFallback(args.url);
+        if (!out.success) {
+          return { success: false, error: out.error || 'browse_failed' };
+        }
+        return {
+          success: true,
+          source: out.source,
+          status: out.status,
+          contentType: out.contentType,
+          preview: String(out.text || '').slice(0, 2400),
+          links: out.links || [],
+        };
+      }
+
+      if (name === 'discover_api_docs') {
+        return await discoverApiDocs(args.siteUrl);
+      }
+
+      if (name === 'http_request_json') {
+        const method = String(args.method || 'GET').toUpperCase();
+        const url = normalizeUrl(args.url);
+        if (!url) {
+          return { success: false, error: 'url_required' };
+        }
+
+        const headers = Object.assign({}, args.headers || {});
+        if (!headers['Content-Type'] && method !== 'GET') {
+          headers['Content-Type'] = 'application/json';
+        }
+
+        const init = { method, headers };
+        if (args.body && method !== 'GET') {
+          init.body = typeof args.body === 'string' ? args.body : JSON.stringify(args.body);
+        }
+
+        const r = await safeFetch(url, init);
+        if (!r.ok) {
+          return { success: false, error: String(r.error) };
+        }
+
+        const text = await r.res.text();
+        let json = null;
+        try { json = JSON.parse(text); } catch {}
+
+        return {
+          success: r.res.ok,
+          status: r.res.status,
+          headers: {
+            contentType: r.res.headers.get('content-type') || '',
+            allowOrigin: r.res.headers.get('access-control-allow-origin') || '',
+          },
+          data: json,
+          text: json ? null : text.slice(0, 1200),
+        };
+      }
+
+      if (name === 'cors_probe') {
+        return await corsProbe(args.url, args.method || 'POST');
+      }
+
+      return { success: false, error: 'unknown_tool' };
+    }
+
+    function toolSchema() {
+      return [
+        {
+          type: 'function',
+          function: {
+            name: 'browse_site',
+            description: '浏览一个网站页面并返回摘要与链接。若直连失败会自动尝试代理读取。',
+            parameters: {
+              type: 'object',
+              properties: {
+                url: { type: 'string' },
+              },
+              required: ['url'],
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'discover_api_docs',
+            description: '自动探查站点 API 文档入口（如 /api-docs、/llms.txt、openapi）。',
+            parameters: {
+              type: 'object',
+              properties: {
+                siteUrl: { type: 'string' },
+              },
+              required: ['siteUrl'],
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'http_request_json',
+            description: '发送一个通用 HTTP 请求并尽量解析 JSON。可用于任何网站 API。',
+            parameters: {
+              type: 'object',
+              properties: {
+                url: { type: 'string' },
+                method: { type: 'string' },
+                headers: { type: 'object' },
+                body: { type: 'object' },
+              },
+              required: ['url', 'method'],
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'cors_probe',
+            description: '对指定 URL 做 CORS 预检诊断。',
+            parameters: {
+              type: 'object',
+              properties: {
+                url: { type: 'string' },
+                method: { type: 'string' },
+              },
+              required: ['url'],
+            },
+          },
+        },
+      ];
+    }
+
+    async function callModel(messages) {
+      const provider = activeProvider();
+      if (!provider || !provider.baseUrl || !provider.model) {
+        throw new Error('模型配置不完整，请先在模型配置中设置 Base URL 与模型 ID');
+      }
+      if (!provider.apiKey) {
+        throw new Error('缺少 API Key，请先在模型配置中填写');
+      }
+
+      const res = await fetch(`${provider.baseUrl.replace(/\/$/, '')}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${provider.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: provider.model,
+          messages,
+          tools: toolSchema(),
+          tool_choice: 'auto',
+          temperature: 0.2,
+        }),
+      });
+
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`LLM HTTP ${res.status}: ${txt.slice(0, 300)}`);
+      }
+
+      return await res.json();
+    }
+
+    async function runAgent(userText) {
+      const prompt = activePrompt();
+      bubble(userText, 'you');
+      log(`Agent 开始执行，当前模型: ${activeProvider().name}/${activeProvider().model}`);
+
+      const messages = [
+        {
+          role: 'system',
+          content:
+            `${prompt.content}\n\n` +
+            '执行规则：\n' +
+            '1) 当用户给的是站点域名（不是 API 路径）时，先调用 discover_api_docs(siteUrl) 查文档，再决定 API 路径。\n' +
+            '2) 可先调用 browse_site(url) 看页面和链接，再调用 http_request_json。\n' +
+            '3) 若请求失败，先给出失败原因，再自动尝试替代路径（例如从根域名切换到文档发现出的 API 路径）。\n' +
+            '4) 禁止臆断目标站点；若信息不足，先明确说明缺失参数并向用户确认。\n' +
+            '5) 回复务必给出已执行动作和下一步。',
+        },
+        { role: 'user', content: userText },
+      ];
+
+      for (let step = 0; step < 6; step++) {
+        let out;
+        try {
+          out = await callModel(messages);
+        } catch (error) {
+          bubble(`Agent 失败: ${String(error)}`, 'ai');
+          log(`Agent 失败: ${String(error)}`, 'err');
+          return;
+        }
+
+        const msg = out?.choices?.[0]?.message || {};
+        const toolCalls = msg.tool_calls || [];
+
+        if (!toolCalls.length) {
+          bubble(msg.content || '(无内容)', 'ai');
+          log('Agent 执行完成', 'ok');
+          return;
+        }
+
+        messages.push({
+          role: 'assistant',
+          content: msg.content || '',
+          tool_calls: toolCalls,
+        });
+
+        for (const tc of toolCalls) {
+          const name = tc?.function?.name;
+          let args = {};
+          try { args = JSON.parse(tc?.function?.arguments || '{}'); } catch {}
+          log(`工具调用 -> ${name} ${JSON.stringify(args)}`);
+
+          let result;
+          try {
+            result = await toolCall(name, args);
+            log(`工具结果 <- ${JSON.stringify(result).slice(0, 420)}`, result.success === false ? 'warn' : 'ok');
+          } catch (error) {
+            result = { success: false, error: String(error) };
+            log(`工具异常 <- ${String(error)}`, 'err');
+          }
+
+          messages.push({
+            role: 'tool',
+            tool_call_id: tc.id,
+            content: JSON.stringify(result),
+          });
+        }
+      }
+
+      bubble('达到最大执行步骤限制，请继续细化指令。', 'ai');
+      log('触发最大步骤限制', 'warn');
+    }
+
+    function openModal(id) {
+      document.getElementById(id).classList.add('open');
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.remove('open');
+    }
+
+    document.getElementById('openConfig').addEventListener('click', () => {
+      document.getElementById('corsUrl').value = state.corsCheckUrl || '';
+      renderProviders();
+      renderPrompts();
+      openModal('configOverlay');
+    });
+    document.getElementById('closeConfig').addEventListener('click', () => closeModal('configOverlay'));
+
+    document.getElementById('openLogs').addEventListener('click', () => openModal('logsOverlay'));
+    document.getElementById('closeLogs').addEventListener('click', () => closeModal('logsOverlay'));
+
+    document.getElementById('addProvider').addEventListener('click', () => {
+      const id = uid('p');
+      state.providers.push({
+        id,
+        name: `新厂商 ${state.providers.length + 1}`,
+        baseUrl: '',
+        apiKey: '',
+        model: '',
+      });
+      renderProviders();
+    });
+
+    document.getElementById('addPrompt').addEventListener('click', () => {
+      const id = uid('t');
+      state.prompts.push({
+        id,
+        name: `新提示词 ${state.prompts.length + 1}`,
+        content: '你是一个通用助手，请先澄清需求，再给出步骤化答案。',
+      });
+      renderPrompts();
+    });
+
+    document.getElementById('testCorsBtn').addEventListener('click', async () => {
+      const url = document.getElementById('corsUrl').value.trim();
+      if (!url) {
+        alert('请先填写一个 CORS 检查 URL');
+        return;
+      }
+      openModal('logsOverlay');
+      await corsProbe(url, 'POST');
+    });
+
+    document.getElementById('saveConfig').addEventListener('click', () => {
+      state.corsCheckUrl = document.getElementById('corsUrl').value.trim();
+      saveConfigToStorage();
+      updateSummary();
+      closeModal('configOverlay');
+      log('配置已保存', 'ok');
+    });
+
+    document.getElementById('copyLogs').addEventListener('click', async () => {
+      const text = logEl.innerText || '';
+      try {
+        await navigator.clipboard.writeText(text);
+        log('日志已复制到剪贴板', 'ok');
+      } catch {
+        log('日志复制失败', 'err');
+      }
+    });
+
+    document.getElementById('clearLogs').addEventListener('click', () => {
+      logEl.innerHTML = '';
+    });
+
+    document.getElementById('send').addEventListener('click', async () => {
+      const input = document.getElementById('input');
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+      await runAgent(text);
+    });
+
+    document.getElementById('input').addEventListener('keydown', async (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        document.getElementById('send').click();
+      }
+    });
+
+    updateSummary();
+    bubble('你好，我已就绪。你可以直接发送任务指令。', 'ai');
+    log('页面已加载，默认模型 DeepSeek / deepseek-chat');
+  </script>
+</body>
+</html>

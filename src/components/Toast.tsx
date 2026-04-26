@@ -49,7 +49,7 @@ export default function Toast({
   const Icon = styles.icon;
 
   return (
-    <div className="fixed bottom-4 right-4 z-[60] w-[min(24rem,calc(100vw-2rem))] rounded-xl border px-4 py-3 shadow-lg backdrop-blur-sm transition-all duration-200 ${styles.box}">
+    <div className={`fixed bottom-4 right-4 z-[60] w-[min(24rem,calc(100vw-2rem))] rounded-xl border px-4 py-3 shadow-lg backdrop-blur-sm transition-all duration-200 ${styles.box}`}>
       <div className="flex items-start gap-3">
         <Icon className={`mt-0.5 h-5 w-5 shrink-0 ${styles.iconClass}`} />
         <p className="flex-1 text-sm font-medium">{message}</p>
@@ -57,7 +57,7 @@ export default function Toast({
           type="button"
           onClick={onClose}
           className="rounded-md p-1 transition-colors hover:bg-black/5"
-          aria-label="关闭提示"
+          aria-label={type === 'success' ? 'Close success message' : type === 'error' ? 'Close error message' : 'Close message'}
         >
           <X className="h-4 w-4" />
         </button>

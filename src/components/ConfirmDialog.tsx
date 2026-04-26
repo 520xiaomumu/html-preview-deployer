@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { useLanguage } from '@/components/LanguageProvider';
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -17,12 +18,17 @@ export default function ConfirmDialog({
   isOpen,
   title,
   message,
-  confirmText = '确定',
-  cancelText = '取消',
+  confirmText,
+  cancelText,
   type = 'warning',
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const { isZh } = useLanguage();
+
+  const resolvedConfirmText = confirmText ?? (isZh ? '确定' : 'Confirm');
+  const resolvedCancelText = cancelText ?? (isZh ? '取消' : 'Cancel');
+
   if (!isOpen) return null;
 
   const getConfirmButtonClass = () => {
@@ -47,13 +53,13 @@ export default function ConfirmDialog({
             onClick={onCancel}
             className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           >
-            {cancelText}
+            {resolvedCancelText}
           </button>
           <button
             onClick={onConfirm}
             className={`px-4 py-2 text-sm font-medium text-white border border-transparent rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 ${getConfirmButtonClass()}`}
           >
-            {confirmText}
+            {resolvedConfirmText}
           </button>
         </div>
       </div>

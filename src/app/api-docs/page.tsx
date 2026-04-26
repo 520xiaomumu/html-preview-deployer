@@ -1,7 +1,44 @@
+'use client';
+
 import Link from 'next/link';
 import agentDocs from '@/content/agent-docs.json';
+import { useLanguage } from '@/components/LanguageProvider';
 
 export default function ApiDocsPage() {
+  const { isZh } = useLanguage();
+
+  const text = isZh
+    ? {
+        title: 'API 部署快速文档',
+        back: '返回首页',
+        intro: '接口说明',
+        deployEntry: '部署入口：POST /api/deploy',
+        contentCollab: '内容协作：GET /api/deploy/content、PATCH /api/deploy/content',
+        requestExample: '请求示例',
+        customDeploy: '自定义短链部署示例（默认关闭）',
+        readHtml: '读取 HTML 内容',
+        downloadHtml: '下载 HTML 文件',
+        updateHtml: '更新 HTML 内容',
+        successResp: '成功响应示例',
+        cooldownResp: '冷却响应示例',
+        commonError: '常见错误调用（不要这样用）',
+      }
+    : {
+        title: 'API Deployment Quick Docs',
+        back: 'Back to Home',
+        intro: 'API Overview',
+        deployEntry: 'Deploy endpoint: POST /api/deploy',
+        contentCollab: 'Content ops: GET /api/deploy/content, PATCH /api/deploy/content',
+        requestExample: 'Request Example',
+        customDeploy: 'Custom short-code deploy example (disabled by default)',
+        readHtml: 'Read HTML content',
+        downloadHtml: 'Download HTML file',
+        updateHtml: 'Update HTML content',
+        successResp: 'Success Response Example',
+        cooldownResp: 'Cooldown Response Example',
+        commonError: 'Common wrong call (avoid this)',
+      };
+
   const sampleRequest = `curl -X POST https://www.htmlcode.fun/api/deploy \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -42,11 +79,21 @@ export default function ApiDocsPage() {
   "nextAvailableAt": "2026-03-16T12:00:10.000Z"
 }`;
 
-  const sampleCooldown = `{
+  const sampleCooldown = isZh
+    ? `{
   "success": false,
   "error": "当前处于部署冷却期，请稍后再试。",
   "errorCode": "COOLDOWN_ACTIVE",
   "detail": "部署成功后需等待 10 秒。",
+  "stage": "rate_limit",
+  "requestId": "uuid",
+  "retryAfterSeconds": 7
+}`
+    : `{
+  "success": false,
+  "error": "Deployment cooldown is active. Please retry later.",
+  "errorCode": "COOLDOWN_ACTIVE",
+  "detail": "Wait 10 seconds after a successful deploy.",
   "stage": "rate_limit",
   "requestId": "uuid",
   "retryAfterSeconds": 7
@@ -55,16 +102,16 @@ export default function ApiDocsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">API 部署快速文档</h1>
+        <h1 className="text-2xl font-bold text-gray-900">{text.title}</h1>
         <Link href="/" className="text-blue-600 hover:text-blue-800 text-sm font-medium">
-          返回首页
+          {text.back}
         </Link>
       </div>
 
       <div className="rounded-lg border border-gray-200 bg-white p-5 space-y-4">
-        <h2 className="text-lg font-semibold text-gray-900">接口说明</h2>
-        <p className="text-sm text-gray-700">部署入口：POST /api/deploy</p>
-        <p className="text-sm text-gray-700">内容协作：GET /api/deploy/content、PATCH /api/deploy/content</p>
+        <h2 className="text-lg font-semibold text-gray-900">{text.intro}</h2>
+        <p className="text-sm text-gray-700">{text.deployEntry}</p>
+        <p className="text-sm text-gray-700">{text.contentCollab}</p>
         <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1">
           {agentDocs.apiRules.map((item) => (
             <li key={item}>{item}</li>
@@ -73,47 +120,49 @@ export default function ApiDocsPage() {
       </div>
 
       <div className="rounded-lg border border-gray-200 bg-white p-5 space-y-3">
-        <h2 className="text-lg font-semibold text-gray-900">请求示例</h2>
+        <h2 className="text-lg font-semibold text-gray-900">{text.requestExample}</h2>
         <pre className="overflow-auto rounded-md bg-gray-900 p-4 text-xs text-gray-100">{sampleRequest}</pre>
       </div>
 
       <div className="rounded-lg border border-gray-200 bg-white p-5 space-y-3">
-        <h2 className="text-lg font-semibold text-gray-900">自定义短链部署示例（默认关闭）</h2>
+        <h2 className="text-lg font-semibold text-gray-900">{text.customDeploy}</h2>
         <pre className="overflow-auto rounded-md bg-gray-900 p-4 text-xs text-gray-100">{sampleCustomCodeRequest}</pre>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="rounded-lg border border-gray-200 bg-white p-5 space-y-3">
-          <h2 className="text-lg font-semibold text-gray-900">读取 HTML 内容</h2>
+          <h2 className="text-lg font-semibold text-gray-900">{text.readHtml}</h2>
           <pre className="overflow-auto rounded-md bg-gray-900 p-4 text-xs text-gray-100">{sampleReadRequest}</pre>
         </div>
         <div className="rounded-lg border border-gray-200 bg-white p-5 space-y-3">
-          <h2 className="text-lg font-semibold text-gray-900">下载 HTML 文件</h2>
+          <h2 className="text-lg font-semibold text-gray-900">{text.downloadHtml}</h2>
           <pre className="overflow-auto rounded-md bg-gray-900 p-4 text-xs text-gray-100">{sampleDownloadRequest}</pre>
         </div>
         <div className="rounded-lg border border-gray-200 bg-white p-5 space-y-3">
-          <h2 className="text-lg font-semibold text-gray-900">更新 HTML 内容</h2>
+          <h2 className="text-lg font-semibold text-gray-900">{text.updateHtml}</h2>
           <pre className="overflow-auto rounded-md bg-gray-900 p-4 text-xs text-gray-100">{sampleUpdateRequest}</pre>
         </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-lg border border-gray-200 bg-white p-5 space-y-3">
-          <h2 className="text-lg font-semibold text-gray-900">成功响应示例</h2>
+          <h2 className="text-lg font-semibold text-gray-900">{text.successResp}</h2>
           <pre className="overflow-auto rounded-md bg-gray-900 p-4 text-xs text-gray-100">{sampleSuccess}</pre>
         </div>
         <div className="rounded-lg border border-gray-200 bg-white p-5 space-y-3">
-          <h2 className="text-lg font-semibold text-gray-900">冷却响应示例</h2>
+          <h2 className="text-lg font-semibold text-gray-900">{text.cooldownResp}</h2>
           <pre className="overflow-auto rounded-md bg-gray-900 p-4 text-xs text-gray-100">{sampleCooldown}</pre>
         </div>
       </div>
 
       <div className="rounded-lg border border-amber-200 bg-amber-50 p-5">
         <div className="space-y-2">
-          <p className="text-sm font-semibold text-amber-900">常见错误调用（不要这样用）</p>
-          <pre className="overflow-auto rounded-md bg-gray-900 p-4 text-xs text-gray-100">curl -L -X POST https://www.htmlcode.fun/api/deploy -F "file=@index.html"</pre>
+          <p className="text-sm font-semibold text-amber-900">{text.commonError}</p>
+          <pre className="overflow-auto rounded-md bg-gray-900 p-4 text-xs text-gray-100">{`curl -L -X POST https://www.htmlcode.fun/api/deploy -F "file=@index.html"`}</pre>
           <p className="text-sm text-amber-800">
-            {agentDocs.commonErrorTip}
+            {isZh
+              ? agentDocs.commonErrorTip
+              : 'This API expects a JSON request body. Do not send multipart form-data uploads.'}
           </p>
         </div>
       </div>

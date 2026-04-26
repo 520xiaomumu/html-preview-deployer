@@ -1,42 +1,98 @@
 'use client';
 
-import React, { useEffect, useState, useCallback, useRef } from 'react';
-import Link from 'next/link';
-import { Trash2, Eye, Calendar, ExternalLink, PowerOff, PlayCircle, Download, Copy, Check, HardDrive, Search } from 'lucide-react';
-import { Deployment } from '@/lib/db';
-import ConfirmDialog from '@/components/ConfirmDialog';
+import React, { useMemo, useState } from 'react';
+import FileUpload from '@/components/FileUpload';
+import Preview from '@/components/Preview';
+import DeploySuccess from '@/components/DeploySuccess';
 import Toast from '@/components/Toast';
+import { Rocket, Loader2 } from 'lucide-react';
+import agentDocs from '@/content/agent-docs.json';
+import { useLanguage } from '@/components/LanguageProvider';
 
-function formatFileSize(bytes: number | null | undefined) {
-  if (bytes == null || Number.isNaN(bytes)) return null;
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+type InputMode = 'upload' | 'editor';
+
+interface DeployResult {
+  id: string;
+  code: string;
+  url: string;
+  qrCode: string;
 }
 
-function FileSizeInfo({ size }: { size: number | null | undefined }) {
-  const formattedSize = formatFileSize(size);
+const DEFAULT_FILENAME = 'index.html';
 
-  if (!formattedSize) return null;
-  return (
-    <div className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2 py-1 text-xs font-medium text-gray-600" title="HTML 文件大小">
-      <HardDrive className="mr-1 h-3.5 w-3.5" />
-      {formattedSize}
-    </div>
+export default function DeployPage() {
+  const { language, isZh } = useLanguage();
+
+  const text = useMemo(
+    () =>
+      isZh
+        ? {
+            emptyContent: '请先上传或输入 HTML 内容',
+            deployFailedPrefix: '部署失败',
+            deployError: '部署过程中发生错误',
+            pageTitle: '手动部署',
+            pageDesc: `直接上传 HTML 或粘贴代码后即可部署。${agentDocs.deployEndpoint}`,
+            doneTitle: '部署完成',
+            deployAnother: '部署另一个文件',
+            previewComingTitle: '实时预览将在这里显示',
+            previewComingDesc: '上传 HTML 文件或粘贴代码后，预览会即时更新，确认无误再一键上线。',
+            uploadTab: '上传文件',
+            editorTab: '粘贴代码',
+            filenameLabel: '部署文件名',
+            filenameTip: '未填写 .html 后缀时，系统会自动补全。',
+            contentLoadedTip: '内容已载入，可切换到“粘贴代码”继续微调。',
+            htmlCode: 'HTML 代码',
+            infoTitle: '内容信息',
+            source: '来源',
+            sourceUpload: '上传文件',
+            sourceManual: '手动输入',
+            fileName: '文件名',
+            fileSize: '大小',
+            status: '状态',
+            statusReady: '可预览 / 可部署',
+            statusWaiting: '等待输入内容',
+            deploying: '部署中...',
+            deployNow: '立即部署',
+            clear: '清空内容',
+          }
+        : {
+            emptyContent: 'Please upload or paste HTML content first',
+            deployFailedPrefix: 'Deployment failed',
+            deployError: 'An error occurred during deployment',
+            pageTitle: 'Manual Deploy',
+            pageDesc: `Upload HTML or paste code to deploy instantly. ${agentDocs.deployEndpoint}`,
+            doneTitle: 'Deployment Complete',
+            deployAnother: 'Deploy another file',
+            previewComingTitle: 'Live preview will appear here',
+            previewComingDesc: 'Upload an HTML file or paste code to see real-time preview before deploying.',
+            uploadTab: 'Upload File',
+            editorTab: 'Paste Code',
+            filenameLabel: 'Deployment filename',
+            filenameTip: 'If no .html suffix is provided, it will be appended automatically.',
+            contentLoadedTip: 'Content loaded. You can switch to "Paste Code" for quick edits.',
+            htmlCode: 'HTML code',
+            infoTitle: 'Content Info',
+            source: 'Source',
+            sourceUpload: 'Uploaded file',
+            sourceManual: 'Manual input',
+            fileName: 'Filename',
+            fileSize: 'Size',
+            status: 'Status',
+            statusReady: 'Ready to preview and deploy',
+            statusWaiting: 'Waiting for content',
+            deploying: 'Deploying...',
+            deployNow: 'Deploy Now',
+            clear: 'Clear Content',
+          },
+    [isZh],
   );
-}
 
-export default function DeploymentsPage() {
-  const [deploys, setDeploys] = useState<Deployment[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('all');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState<'latest' | 'oldest' | 'mostViewed' | 'leastViewed'>('latest');
-  const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
-  const pageSize = 12;
+  const [inputMode, setInputMode] = useState<InputMode>('upload');
+  const [file, setFile] = useState<File | null>(null);
+  const [filename, setFilename] = useState(DEFAULT_FILENAME);
+  const [content, setContent] = useState<string>('');
+  const [isDeploying, setIsDeploying] = useState(false);
+  const [deployResult, setDeployResult] = useState<DeployResult | null>(null);
   const [toast, setToast] = useState<{
     open: boolean;
     message: string;
@@ -46,442 +102,250 @@ export default function DeploymentsPage() {
     message: '',
     type: 'info',
   });
-  
-  // Dialog State
-  const [dialogState, setDialogState] = useState<{
-    isOpen: boolean;
-    type: 'danger' | 'warning' | 'info';
-    title: string;
-    message: string;
-    onConfirm: () => void;
-  }>({
-    isOpen: false,
-    type: 'warning',
-    title: '',
-    message: '',
-    onConfirm: () => {},
-  });
-
-  // Track which card just had its code copied
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  const htmlCacheRef = useRef<Map<string, string>>(new Map());
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setToast({ open: true, message, type });
   };
 
-  const fetchDeploys = useCallback(async () => {
-    setIsRefreshing(true);
+  const hasContent = content.trim().length > 0;
+  const normalizedFilename = filename.trim() || DEFAULT_FILENAME;
+  const deployFilename = /\.html?$/i.test(normalizedFilename) ? normalizedFilename : `${normalizedFilename}.html`;
+  const displaySize = file ? file.size : new Blob([content]).size;
+
+  const handleFileSelect = (selectedFile: File, fileContent: string) => {
+    setInputMode('upload');
+    setFile(selectedFile);
+    setFilename(selectedFile.name);
+    setContent(fileContent);
+    setDeployResult(null);
+  };
+
+  const handleModeChange = (mode: InputMode) => {
+    setInputMode(mode);
+    setDeployResult(null);
+
+    if (mode === 'editor' && !filename.trim()) {
+      setFilename(DEFAULT_FILENAME);
+    }
+  };
+
+  const handleContentChange = (nextContent: string) => {
+    setFile(null);
+    setContent(nextContent);
+    setDeployResult(null);
+  };
+
+  const handleReset = () => {
+    setInputMode('upload');
+    setFile(null);
+    setFilename(DEFAULT_FILENAME);
+    setContent('');
+    setDeployResult(null);
+  };
+
+  const handleDeploy = async () => {
+    if (!hasContent) {
+      showToast(text.emptyContent, 'error');
+      return;
+    }
+
+    setIsDeploying(true);
     try {
-      const params = new URLSearchParams({
-        page: String(page),
-        pageSize: String(pageSize),
-        sortBy,
+      const response = await fetch('/api/deploy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          content,
+          filename: deployFilename,
+          title: deployFilename.replace(/\.html?$/i, ''),
+        }),
       });
 
-      if (filter !== 'all') {
-        params.set('status', filter);
-      }
+      const data = await response.json();
 
-      if (searchTerm.trim()) {
-        params.set('q', searchTerm.trim());
+      if (data.success) {
+        setDeployResult(data);
+      } else {
+        showToast(`${text.deployFailedPrefix}: ${data.error}`, 'error');
       }
-
-      const res = await fetch(`/api/deploys?${params.toString()}`);
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || '获取部署列表失败');
-      }
-      setDeploys(data.deploys || []);
-      setTotal(data.total || 0);
-      setTotalPages(data.totalPages || 1);
     } catch (error) {
-      console.error('Failed to fetch deploys', error);
-      showToast('获取部署列表失败，请稍后重试', 'error');
+      console.error('Deploy error:', error);
+      showToast(text.deployError, 'error');
     } finally {
-      setLoading(false);
-      setIsRefreshing(false);
+      setIsDeploying(false);
     }
-  }, [filter, page, searchTerm, sortBy]);
-
-  useEffect(() => {
-    fetchDeploys();
-  }, [fetchDeploys]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [filter, searchTerm, sortBy]);
-
-  const closeDialog = () => {
-    setDialogState(prev => ({ ...prev, isOpen: false }));
   };
-
-  const showDialog = (
-    type: 'danger' | 'warning' | 'info',
-    title: string,
-    message: string,
-    onConfirm: () => void
-  ) => {
-    setDialogState({
-      isOpen: true,
-      type,
-      title,
-      message,
-      onConfirm: () => {
-        onConfirm();
-        closeDialog();
-      },
-    });
-  };
-
-  const handleToggleStatus = (id: string, currentStatus: string) => {
-    const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
-    const actionName = newStatus === 'active' ? '上架' : '下架';
-    
-    showDialog(
-      newStatus === 'inactive' ? 'warning' : 'info',
-      `确认${actionName}`,
-      `确定要${actionName}这个部署吗？${newStatus === 'inactive' ? '下架后链接将暂时失效。' : '上架后链接将恢复访问。'}`,
-      async () => {
-        try {
-          const res = await fetch(`/api/deploy/${id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: newStatus }),
-          });
-          if (res.ok) {
-            fetchDeploys();
-            showToast(`已${actionName}`, 'success');
-          } else {
-            showToast(`${actionName}失败`, 'error');
-          }
-        } catch (error) {
-          console.error('Toggle status error', error);
-          showToast('操作失败', 'error');
-        }
-      }
-    );
-  };
-
-  const handleDelete = (id: string) => {
-    showDialog(
-      'danger',
-      '确认彻底删除',
-      '确定要彻底删除这个部署吗？删除后所有数据和文件将无法恢复！',
-      async () => {
-        try {
-          const res = await fetch(`/api/deploy/${id}`, {
-            method: 'DELETE',
-          });
-          if (res.ok) {
-            fetchDeploys();
-            showToast('已删除该部署', 'success');
-          } else {
-            showToast('删除失败', 'error');
-          }
-        } catch (error) {
-          console.error('Delete error', error);
-          showToast('操作失败', 'error');
-        }
-      }
-    );
-  };
-
-  const fetchDeploymentHtml = useCallback(async (deploy: Deployment) => {
-    const cachedHtml = htmlCacheRef.current.get(deploy.code);
-    if (cachedHtml) {
-      return cachedHtml;
-    }
-
-    const res = await fetch(`/api/deploy/content?code=${encodeURIComponent(deploy.code)}`);
-    if (!res.ok) {
-      throw new Error('获取内容失败');
-    }
-
-    const data = await res.json();
-    if (!data.success || typeof data.content !== 'string') {
-      throw new Error(data.error || '获取内容失败');
-    }
-
-    htmlCacheRef.current.set(deploy.code, data.content);
-    return data.content;
-  }, []);
-
-  const handleDownload = useCallback(async (deploy: Deployment) => {
-    try {
-      const html = await fetchDeploymentHtml(deploy);
-      const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = deploy.filename || `${deploy.code}.html`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Download error', error);
-      showToast('下载失败', 'error');
-    }
-  }, [fetchDeploymentHtml]);
-
-  const handleCopyCode = useCallback(async (deploy: Deployment) => {
-    try {
-      const html = await fetchDeploymentHtml(deploy);
-      await navigator.clipboard.writeText(html);
-      setCopiedId(deploy.id);
-      showToast('源码已复制到剪贴板', 'success');
-      setTimeout(() => setCopiedId(null), 2000);
-    } catch (error) {
-      console.error('Copy error', error);
-      showToast('复制失败', 'error');
-    }
-  }, [fetchDeploymentHtml]);
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleString('zh-CN');
-  };
-
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-8">
       <Toast
         isOpen={toast.open}
         message={toast.message}
         type={toast.type}
         onClose={() => setToast((current) => ({ ...current, open: false }))}
       />
-      <ConfirmDialog
-        isOpen={dialogState.isOpen}
-        type={dialogState.type}
-        title={dialogState.title}
-        message={dialogState.message}
-        onConfirm={dialogState.onConfirm}
-        onCancel={closeDialog}
-      />
-      
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">部署历史</h1>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <div className="relative min-w-[260px]">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="搜索标题、文件名或部署码"
-              className="w-full rounded-md border border-gray-300 py-2 pl-9 pr-3 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as 'latest' | 'oldest' | 'mostViewed' | 'leastViewed')}
-            className="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border"
-          >
-            <option value="latest">按时间：最新优先</option>
-            <option value="oldest">按时间：最早优先</option>
-            <option value="mostViewed">按访问量：从高到低</option>
-            <option value="leastViewed">按访问量：从低到高</option>
-          </select>
-          <select
-            value={filter}
-            onChange={(e) => setFilter(e.target.value as any)}
-            className="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border"
-          >
-            <option value="all">全部状态</option>
-            <option value="active">运行中</option>
-            <option value="inactive">已下架</option>
-          </select>
-        </div>
+
+      <div className="rounded-3xl border border-sky-100 bg-white p-6 shadow-sm">
+        <h1 className="text-2xl font-bold text-slate-900">{text.pageTitle}</h1>
+        <p className="mt-1 text-sm text-slate-600">
+          {text.pageDesc}
+        </p>
       </div>
 
-      {isRefreshing && !loading && (
-        <p className="text-sm text-gray-500">正在更新列表...</p>
-      )}
-
-      {deploys.length === 0 ? (
-        <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
-          <p className="text-gray-500">暂无部署记录</p>
-          <Link href="/" className="text-blue-600 hover:text-blue-800 mt-2 inline-block">
-            去部署第一个页面
-          </Link>
+      {deployResult ? (
+        <div className="rounded-3xl border border-emerald-100 bg-white p-6 shadow-sm">
+          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h3 className="text-2xl font-bold text-slate-900">{text.doneTitle}</h3>
+            <button
+              onClick={handleReset}
+              className="inline-flex items-center justify-center rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            >
+              {text.deployAnother}
+            </button>
+          </div>
+          <DeploySuccess
+            url={deployResult.url}
+            qrCode={deployResult.qrCode}
+            code={deployResult.code}
+            onNotify={showToast}
+          />
         </div>
       ) : (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {deploys.map((deploy) => (
-            <div key={deploy.id} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow flex flex-col group/card">
-              {/* HTML Preview Area */}
-              <div className="relative w-full h-64 bg-white border-b border-gray-200 overflow-hidden group/preview">
-                {deploy.status === 'active' ? (
-                  <>
-                    <div className="absolute w-[200%] h-[200%] origin-top-left scale-50">
-                      <iframe
-                        src={`/s/${deploy.code}?preview=1`}
-                        title={`预览: ${deploy.title}`}
-                        className="w-full h-full border-0 bg-white"
-                        sandbox="allow-scripts"
-                        loading="lazy"
-                      />
-                    </div>
-                    <a
-                      href={`/s/${deploy.code}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="absolute right-3 top-3 z-10 inline-flex items-center rounded-full border border-white/70 bg-white/92 px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm backdrop-blur transition-colors hover:bg-white"
-                      title="在新标签页中打开完整预览"
-                    >
-                      <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-                      打开预览
-                    </a>
-                    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-white via-white/95 to-transparent px-4 py-3 text-xs text-gray-500 opacity-0 transition-opacity group-hover/preview:opacity-100">
-                      可直接拖动右侧滚动条查看完整页面，或点击右上角进入完整预览
-                    </div>
-                  </>
-                ) : (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 bg-gray-50 z-10">
-                    <PowerOff className="w-8 h-8 mb-3 opacity-30" />
-                    <span className="text-sm font-medium text-gray-500">项目已下架</span>
-                    <span className="text-xs mt-1 text-gray-400">重新上架后可恢复预览</span>
-                  </div>
-                )}
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+          <div className="xl:col-span-2">
+            {hasContent ? (
+              <Preview content={content} />
+            ) : (
+              <div className="flex h-[600px] items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
+                <div className="max-w-md space-y-3">
+                  <h3 className="text-2xl font-semibold text-slate-900">{text.previewComingTitle}</h3>
+                  <p className="text-slate-500">{text.previewComingDesc}</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-6">
+            <div className="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="inline-flex w-full rounded-lg bg-slate-100 p-1">
+                <button
+                  type="button"
+                  onClick={() => handleModeChange('upload')}
+                  className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                    inputMode === 'upload' ? 'bg-white text-sky-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {text.uploadTab}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleModeChange('editor')}
+                  className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                    inputMode === 'editor' ? 'bg-white text-sky-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {text.editorTab}
+                </button>
               </div>
 
-              <div className="p-5 flex flex-col flex-1">
-                <div className="flex justify-between items-start mb-3 gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-lg font-medium text-gray-900 truncate" title={deploy.title}>
-                        {deploy.title}
-                      </h3>
-                      <FileSizeInfo size={deploy.fileSize} />
-                    </div>
-                    <p
-                      className="mt-1 truncate text-xs text-gray-400"
-                      title={`访问地址: /s/${deploy.code}`}
-                    >
-                      短链后缀: {deploy.code}
-                    </p>
-                  </div>
-                  <span className={`shrink-0 px-2 py-1 text-xs font-semibold rounded-full border ${
-                    deploy.status === 'active' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-50 text-gray-500 border-gray-200'
-                  }`}>
-                    {deploy.status === 'active' ? '运行中' : '已下架'}
+              <div className="space-y-2">
+                <label htmlFor="filename" className="block text-sm font-medium text-slate-700">
+                  {text.filenameLabel}
+                </label>
+                <input
+                  id="filename"
+                  type="text"
+                  value={filename}
+                  onChange={(e) => {
+                    setFilename(e.target.value);
+                    setDeployResult(null);
+                  }}
+                  placeholder={DEFAULT_FILENAME}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none ring-sky-300 transition focus:border-sky-400 focus:ring-2"
+                />
+                <p className="text-xs text-slate-500">{text.filenameTip}</p>
+              </div>
+
+              {inputMode === 'upload' ? (
+                <div className="space-y-3">
+                  <FileUpload onFileSelect={handleFileSelect} />
+                  {hasContent && <p className="text-sm text-slate-500">{text.contentLoadedTip}</p>}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <label htmlFor="html-editor" className="block text-sm font-medium text-slate-700">
+                    {text.htmlCode}
+                  </label>
+                  <textarea
+                    id="html-editor"
+                    value={content}
+                    onChange={(e) => handleContentChange(e.target.value)}
+                    placeholder={
+                      language === 'zh'
+                        ? '<!doctype html>\n<html>\n  <head>\n    <meta charset="UTF-8" />\n    <title>我的页面</title>\n  </head>\n  <body>\n    <h1>Hello htmlcode.fun</h1>\n  </body>\n</html>'
+                        : '<!doctype html>\n<html>\n  <head>\n    <meta charset="UTF-8" />\n    <title>My Page</title>\n  </head>\n  <body>\n    <h1>Hello htmlcode.fun</h1>\n  </body>\n</html>'
+                    }
+                    className="min-h-[320px] w-full rounded-lg border border-slate-300 px-3 py-3 text-sm text-slate-900 outline-none ring-sky-300 transition focus:border-sky-400 focus:ring-2"
+                    spellCheck={false}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h3 className="mb-4 text-lg font-semibold text-slate-900">{text.infoTitle}</h3>
+              <div className="space-y-3 text-sm">
+                <div className="flex justify-between gap-3">
+                  <span className="text-slate-500">{text.source}</span>
+                  <span className="font-medium text-slate-900">{file ? text.sourceUpload : text.sourceManual}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-slate-500">{text.fileName}</span>
+                  <span className="max-w-[200px] truncate font-medium text-slate-900" title={deployFilename}>
+                    {deployFilename}
                   </span>
                 </div>
-                
-                <div className="space-y-2 text-sm text-gray-500 flex-1">
-                  <div className="flex items-center">
-                    <Calendar className="w-4 h-4 mr-2" />
-                    {formatDate(deploy.createdAt)}
-                  </div>
-                  <div className="flex items-center">
-                    <span className="flex items-center">
-                      <Eye className="w-4 h-4 mr-2" />
-                      {deploy.viewCount} 次访问
-                    </span>
-                  </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-slate-500">{text.fileSize}</span>
+                  <span className="font-medium text-slate-900">{(displaySize / 1024).toFixed(2)} KB</span>
                 </div>
-
-                <div className="mt-4 pt-4 border-t border-gray-100 flex justify-between items-center">
-                  <div className="flex space-x-1">
-                    <Link
-                      href={`/deploy/${deploy.id}`}
-                      className="p-2 text-gray-400 hover:text-blue-600 transition-colors"
-                      title="查看详情"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                    </Link>
-                    {deploy.status === 'active' && (
-                      <a
-                        href={`/s/${deploy.code}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2 text-gray-400 hover:text-green-600 transition-colors"
-                        title="访问页面"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </a>
-                    )}
-                    <button
-                      onClick={() => handleDownload(deploy)}
-                      className="p-2 text-gray-400 hover:text-blue-600 transition-colors"
-                      title="下载 HTML 文件"
-                    >
-                      <Download className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleCopyCode(deploy)}
-                      className="p-2 text-gray-400 hover:text-purple-600 transition-colors"
-                      title="复制代码"
-                    >
-                      {copiedId === deploy.id ? (
-                        <Check className="w-4 h-4 text-green-500" />
-                      ) : (
-                        <Copy className="w-4 h-4" />
-                      )}
-                    </button>
-                  </div>
-                  
-                  <div className="flex space-x-1">
-                    <button
-                      onClick={() => handleToggleStatus(deploy.id, deploy.status)}
-                      className={`p-2 transition-colors ${
-                        deploy.status === 'active' 
-                          ? 'text-gray-400 hover:text-orange-500' 
-                          : 'text-gray-400 hover:text-green-500'
-                      }`}
-                      title={deploy.status === 'active' ? "下架" : "上架"}
-                    >
-                      {deploy.status === 'active' ? (
-                        <PowerOff className="w-4 h-4" />
-                      ) : (
-                        <PlayCircle className="w-4 h-4" />
-                      )}
-                    </button>
-                    
-                    <button
-                      onClick={() => handleDelete(deploy.id)}
-                      className="p-2 text-gray-400 hover:text-red-600 transition-colors"
-                      title="彻底删除"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-slate-500">{text.status}</span>
+                  <span className="font-medium text-slate-900">{hasContent ? text.statusReady : text.statusWaiting}</span>
                 </div>
               </div>
+
+              <div className="mt-8 space-y-3">
+                <button
+                  onClick={handleDeploy}
+                  disabled={isDeploying || !hasContent}
+                  className="flex w-full items-center justify-center rounded-lg border border-transparent bg-sky-600 px-4 py-3 text-base font-medium text-white shadow-sm transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isDeploying ? (
+                    <>
+                      <Loader2 className="-ml-1 mr-2 h-5 w-5 animate-spin" />
+                      {text.deploying}
+                    </>
+                  ) : (
+                    <>
+                      <Rocket className="-ml-1 mr-2 h-5 w-5" />
+                      {text.deployNow}
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={handleReset}
+                  className="flex w-full items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-3 text-base font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  {text.clear}
+                </button>
+              </div>
             </div>
-          ))}
+          </div>
         </div>
       )}
-
-      <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600">
-        <span>第 {page} / {totalPages} 页，共 {total} 条</span>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setPage((current) => Math.max(1, current - 1))}
-            disabled={page <= 1 || isRefreshing}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            上一页
-          </button>
-          <button
-            type="button"
-            onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-            disabled={page >= totalPages || isRefreshing}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            下一页
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
