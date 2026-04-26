@@ -10,6 +10,7 @@ import {
 } from '@/lib/deploy-config';
 import { createVersionedHtmlPath, getStoragePathFromFilePath } from '@/lib/storage';
 import { jsonError, withNoStoreHeaders } from '@/lib/api-response';
+import { getErrorMessage } from '@/lib/error';
 
 export const dynamic = 'force-dynamic';
 
@@ -104,18 +105,20 @@ export async function GET(request: NextRequest) {
         url: `${request.nextUrl.protocol}//${request.nextUrl.host}/s/${deployment.code}`,
         filePath: deployment.file_path,
         fileSize: deployment.file_size,
+        likeCount: deployment.like_count ?? 0,
+        locked: Number(deployment.like_count ?? 0) > 0,
         content,
         createdAt: deployment.created_at,
         updatedAt: deployment.updated_at,
       },
       withNoStoreHeaders()
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     return jsonError({
       status: 500,
       code: 'INTERNAL_ERROR',
       message: '读取部署内容失败。',
-      detail: error?.message,
+      detail: getErrorMessage(error),
       requestId,
     });
   }
@@ -196,6 +199,16 @@ export async function PATCH(request: NextRequest) {
         code: 'DEPLOYMENT_NOT_FOUND',
         message: '未找到对应部署。',
         detail: error?.message,
+        requestId,
+      });
+    }
+
+    if (Number(deployment.like_count ?? 0) > 0) {
+      return jsonError({
+        status: 423,
+        code: 'DEPLOYMENT_LOCKED_BY_LIKE',
+        message: '该项目已被手动点赞，内容已锁定，不能再修改。',
+        detail: `当前点赞数: ${deployment.like_count}`,
         requestId,
       });
     }
@@ -285,12 +298,12 @@ export async function PATCH(request: NextRequest) {
       },
       withNoStoreHeaders()
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     return jsonError({
       status: 500,
       code: 'INTERNAL_ERROR',
       message: '更新部署内容失败。',
-      detail: error?.message,
+      detail: getErrorMessage(error),
       requestId,
     });
   }

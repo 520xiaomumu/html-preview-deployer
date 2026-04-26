@@ -51,6 +51,7 @@ Homepage highlights:
 - 直接写代码：将完整 HTML 字符串写入 content 字段即可
 - 支持可选自定义短链：enableCustomCode=true + customCode
 - 已知 code 或 url，可通过 /api/deploy/content 读取、下载、更新 HTML
+- 网页手动点赞后的项目会锁定，Agent API 只能读取，不能更新
 - 不要使用 -F file 或 multipart/form-data
 - 仅支持单个 HTML 内容，不支持批量部署
 - 冷却中返回 429，并提供 retryAfterSeconds

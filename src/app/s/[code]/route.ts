@@ -68,7 +68,7 @@ export async function GET(
       },
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Serve error:', error);
     return new NextResponse('Internal Server Error', { status: 500 });
   }

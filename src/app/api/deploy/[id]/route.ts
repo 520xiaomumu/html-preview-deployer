@@ -2,6 +2,35 @@ import { NextRequest, NextResponse } from 'next/server';
 import { DeploymentRow, supabase } from '@/lib/db';
 import { mapDeploymentRow } from '@/lib/deployment-mapper';
 import { listHtmlPathsByCode } from '@/lib/storage';
+import { getErrorMessage, isMissingLikeCountError } from '@/lib/error';
+
+async function fetchDeploymentLockState(id: string) {
+  const { data, error } = await supabase
+    .from('deployments')
+    .select('like_count')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (isMissingLikeCountError(error)) {
+    const { data: fallbackData, error: fallbackError } = await supabase
+      .from('deployments')
+      .select('id')
+      .eq('id', id)
+      .maybeSingle();
+
+    return {
+      found: Boolean(fallbackData),
+      locked: false,
+      error: fallbackError?.message,
+    };
+  }
+
+  return {
+    found: Boolean(data),
+    locked: Number(data?.like_count ?? 0) > 0,
+    error: error?.message,
+  };
+}
 
 export async function GET(
   request: NextRequest,
@@ -25,9 +54,9 @@ export async function GET(
     const formattedDeployment = mapDeploymentRow(deployment as DeploymentRow);
 
     return NextResponse.json(formattedDeployment);
-  } catch (error: any) {
+  } catch (error: unknown) {
     return NextResponse.json(
-      { error: error.message },
+      { error: getErrorMessage(error) },
       { status: 500 }
     );
   }
@@ -49,6 +78,22 @@ export async function PATCH(
       );
     }
 
+    const lockState = await fetchDeploymentLockState(id);
+
+    if (lockState.error || !lockState.found) {
+      return NextResponse.json(
+        { error: 'Deployment not found' },
+        { status: 404 }
+      );
+    }
+
+    if (lockState.locked) {
+      return NextResponse.json(
+        { error: 'This deployment has likes and is locked.' },
+        { status: 423 }
+      );
+    }
+
     const { error } = await supabase
       .from('deployments')
       .update({ status })
@@ -62,9 +107,9 @@ export async function PATCH(
     }
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
     return NextResponse.json(
-      { error: error.message },
+      { error: getErrorMessage(error) },
       { status: 500 }
     );
   }
@@ -78,11 +123,22 @@ export async function DELETE(
     const { id } = await params;
     
     // Get deployment info first to find files
-    const { data: deployment, error: fetchError } = await supabase
+    let { data: deployment, error: fetchError } = await supabase
       .from('deployments')
-      .select('code')
+      .select('code, like_count')
       .eq('id', id)
-      .single();
+      .maybeSingle();
+
+    if (isMissingLikeCountError(fetchError)) {
+      const fallback = await supabase
+        .from('deployments')
+        .select('code')
+        .eq('id', id)
+        .maybeSingle();
+
+      deployment = fallback.data ? { ...fallback.data, like_count: 0 } : null;
+      fetchError = fallback.error;
+    }
 
     if (fetchError || !deployment) {
       return NextResponse.json(
@@ -92,6 +148,13 @@ export async function DELETE(
     }
 
     const { code } = deployment;
+
+    if (Number(deployment.like_count ?? 0) > 0) {
+      return NextResponse.json(
+        { error: 'This deployment has likes and is locked.' },
+        { status: 423 }
+      );
+    }
 
     const bucket = supabase.storage.from('deployments');
     let htmlPaths: string[] = [];
@@ -129,9 +192,9 @@ export async function DELETE(
     }
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
     return NextResponse.json(
-      { error: error.message },
+      { error: getErrorMessage(error) },
       { status: 500 }
     );
   }

@@ -7,7 +7,7 @@ import DeploySuccess from '@/components/DeploySuccess';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import Preview from '@/components/Preview';
 import Toast from '@/components/Toast';
-import { Trash2, ArrowLeft, Clock, Eye, PowerOff, PlayCircle } from 'lucide-react';
+import { Trash2, ArrowLeft, Clock, Eye, Heart, PowerOff, PlayCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useLanguage } from '@/components/LanguageProvider';
 
@@ -38,6 +38,7 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
             previewTitle: '页面预览',
             unpublishDeploy: '下架部署',
             deleteForever: '彻底删除',
+            lockedByLike: '该项目已被点赞锁定，不能下架、上架或删除。',
             inactiveTipTitle: '该部署已下架',
             inactiveTipDesc: '链接已失效，如需恢复请点击重新上架',
             republish: '重新上架',
@@ -67,6 +68,7 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
             previewTitle: 'Page Preview',
             unpublishDeploy: 'Unpublish Deployment',
             deleteForever: 'Delete Permanently',
+            lockedByLike: 'This project has likes and is locked from publishing changes or deletion.',
             inactiveTipTitle: 'This deployment is offline',
             inactiveTipDesc: 'The link is unavailable. Republish to restore access.',
             republish: 'Republish',
@@ -161,6 +163,10 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
 
   const handleToggleStatus = () => {
     if (!deploy) return;
+    if (deploy.likeCount > 0) {
+      showToast(text.lockedByLike, 'info');
+      return;
+    }
     const newStatus = deploy.status === 'active' ? 'inactive' : 'active';
     const actionName = newStatus === 'active' ? text.publish : text.unpublish;
     
@@ -193,6 +199,11 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
   };
 
   const handleDelete = () => {
+    if (deploy && deploy.likeCount > 0) {
+      showToast(text.lockedByLike, 'info');
+      return;
+    }
+
     showDialog(
       'danger',
       text.deleteTitle,
@@ -267,6 +278,10 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
                 <Eye className="w-4 h-4 mr-1" />
                 {text.views(deploy.viewCount)}
               </span>
+              <span className="flex items-center">
+                <Heart className="w-4 h-4 mr-1" />
+                {deploy.likeCount}
+              </span>
             </div>
           </div>
           <span className={`px-3 py-1 text-sm font-semibold rounded-full ${
@@ -293,7 +308,9 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
             <div className="pt-6 border-t border-gray-100 flex justify-end space-x-3">
               <button
                 onClick={handleToggleStatus}
-                className="flex items-center px-4 py-2 border border-orange-200 text-orange-700 rounded-md hover:bg-orange-50 transition-colors"
+                disabled={deploy.likeCount > 0}
+                className="flex items-center px-4 py-2 border border-orange-200 text-orange-700 rounded-md transition-colors hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-40"
+                title={deploy.likeCount > 0 ? text.lockedByLike : undefined}
               >
                 <PowerOff className="w-4 h-4 mr-2" />
                 {text.unpublishDeploy}
@@ -301,7 +318,9 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
               
               <button
                 onClick={handleDelete}
-                className="flex items-center px-4 py-2 border border-red-300 text-red-700 rounded-md hover:bg-red-50 transition-colors"
+                disabled={deploy.likeCount > 0}
+                className="flex items-center px-4 py-2 border border-red-300 text-red-700 rounded-md transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+                title={deploy.likeCount > 0 ? text.lockedByLike : undefined}
               >
                 <Trash2 className="w-4 h-4 mr-2" />
                 {text.deleteForever}
@@ -319,7 +338,9 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
             <div className="pt-6 border-t border-gray-100 flex justify-end space-x-3">
               <button
                 onClick={handleToggleStatus}
-                className="flex items-center px-4 py-2 border border-green-200 text-green-700 rounded-md hover:bg-green-50 transition-colors"
+                disabled={deploy.likeCount > 0}
+                className="flex items-center px-4 py-2 border border-green-200 text-green-700 rounded-md transition-colors hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-40"
+                title={deploy.likeCount > 0 ? text.lockedByLike : undefined}
               >
                 <PlayCircle className="w-4 h-4 mr-2" />
                 {text.republish}
@@ -327,7 +348,9 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
               
               <button
                 onClick={handleDelete}
-                className="flex items-center px-4 py-2 border border-red-300 text-red-700 rounded-md hover:bg-red-50 transition-colors"
+                disabled={deploy.likeCount > 0}
+                className="flex items-center px-4 py-2 border border-red-300 text-red-700 rounded-md transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+                title={deploy.likeCount > 0 ? text.lockedByLike : undefined}
               >
                 <Trash2 className="w-4 h-4 mr-2" />
                 {text.deleteForever}

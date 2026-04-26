@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db';
 import QRCode from 'qrcode';
-import { randomUUID } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
 import { MAX_HTML_SIZE_BYTES, SHORT_CODE_PATTERN, isValidHtmlContent } from '@/lib/deploy-config';
+import { getErrorMessage } from '@/lib/error';
 
 const COOLDOWN_SECONDS = 10;
 
@@ -46,7 +47,9 @@ function getRetryAfterSeconds(lastSuccessAt: string | null) {
 }
 
 function createRandomCode() {
-  return Math.random().toString(36).substring(2, 8);
+  const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  const bytes = randomBytes(8);
+  return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join('');
 }
 
 async function isCodeTaken(code: string) {
@@ -108,12 +111,12 @@ export async function POST(request: NextRequest) {
     let body: unknown;
     try {
       body = await request.json();
-    } catch (parseError: any) {
+    } catch (parseError: unknown) {
       return failResponse({
         status: 400,
         code: 'INVALID_JSON',
         message: '请求体不是合法 JSON。',
-        detail: parseError?.message,
+        detail: getErrorMessage(parseError),
         hint: '不要使用 -F file 或原始文本，请传 JSON 对象。',
         docs: '/api-docs',
         stage: 'validation',
@@ -247,12 +250,12 @@ export async function POST(request: NextRequest) {
             requestId,
           });
         }
-      } catch (queryError: any) {
+      } catch (queryError: unknown) {
         return failResponse({
           status: 500,
           code: 'CUSTOM_CODE_CHECK_FAILED',
           message: '自定义短链可用性检查失败。',
-          detail: queryError?.message,
+          detail: getErrorMessage(queryError),
           stage: 'code_generation',
           requestId,
         });
@@ -262,12 +265,12 @@ export async function POST(request: NextRequest) {
     } else {
       try {
         resolvedCode = await generateUniqueCode();
-      } catch (generateError: any) {
+      } catch (generateError: unknown) {
         return failResponse({
           status: 500,
           code: 'AUTO_CODE_GENERATION_FAILED',
           message: '自动生成短链后缀失败，请稍后再试。',
-          detail: generateError?.message,
+          detail: getErrorMessage(generateError),
           stage: 'code_generation',
           requestId,
         });
@@ -440,13 +443,13 @@ export async function POST(request: NextRequest) {
       customCodeEnabled,
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Deployment error:', error);
     return failResponse({
       status: 500,
       code: 'INTERNAL_ERROR',
       message: '部署过程中发生未预期错误。',
-      detail: error?.message,
+      detail: getErrorMessage(error),
       stage: 'internal',
       requestId,
     });

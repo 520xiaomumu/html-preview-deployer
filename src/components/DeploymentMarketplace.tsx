@@ -14,6 +14,7 @@ import {
   Check,
   HardDrive,
   Search,
+  Heart,
 } from 'lucide-react';
 import { Deployment } from '@/lib/db';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -68,6 +69,8 @@ export default function DeploymentMarketplace({
             sortOldest: '按时间: 最早优先',
             sortMostViewed: '按访问量: 从高到低',
             sortLeastViewed: '按访问量: 从低到高',
+            sortMostLiked: '按点赞数: 从高到低',
+            sortLeastLiked: '按点赞数: 从低到高',
             filterAll: '全部状态',
             filterActive: '运行中',
             filterInactive: '已下架',
@@ -92,6 +95,8 @@ export default function DeploymentMarketplace({
             downloadFailed: '下载失败',
             copySuccess: '源码已复制到剪贴板',
             copyFailed: '复制失败',
+            likeSuccess: '点赞成功，项目内容已锁定',
+            likeFailed: '点赞失败',
             fileSizeTooltip: 'HTML 文件大小',
             previewLabel: '预览',
             previewOpen: '打开预览',
@@ -102,8 +107,12 @@ export default function DeploymentMarketplace({
             shortCode: '短链后缀',
             addressTitle: (code: string) => `访问地址: /s/${code}`,
             views: (count: number) => `${count} 次访问`,
+            likes: (count: number) => `${count} 个赞`,
             detailTitle: '查看详情',
             visitPage: '访问页面',
+            likeProject: '点赞并锁定项目',
+            likedProject: '已点赞',
+            lockedProject: '已被点赞锁定，不能修改或删除',
             downloadHtml: '下载 HTML 文件',
             copyCode: '复制代码',
             putOffline: '下架',
@@ -121,6 +130,8 @@ export default function DeploymentMarketplace({
             sortOldest: 'Sort by time: oldest first',
             sortMostViewed: 'Sort by views: high to low',
             sortLeastViewed: 'Sort by views: low to high',
+            sortMostLiked: 'Sort by likes: high to low',
+            sortLeastLiked: 'Sort by likes: low to high',
             filterAll: 'All statuses',
             filterActive: 'Active',
             filterInactive: 'Offline',
@@ -149,6 +160,8 @@ export default function DeploymentMarketplace({
             downloadFailed: 'Download failed',
             copySuccess: 'Source copied to clipboard',
             copyFailed: 'Copy failed',
+            likeSuccess: 'Liked. This project is now locked.',
+            likeFailed: 'Failed to like',
             fileSizeTooltip: 'HTML file size',
             previewLabel: 'Preview',
             previewOpen: 'Open Preview',
@@ -159,8 +172,12 @@ export default function DeploymentMarketplace({
             shortCode: 'Short code',
             addressTitle: (code: string) => `URL: /s/${code}`,
             views: (count: number) => `${count} views`,
+            likes: (count: number) => `${count} likes`,
             detailTitle: 'View details',
             visitPage: 'Visit page',
+            likeProject: 'Like and lock project',
+            likedProject: 'Liked',
+            lockedProject: 'Locked by likes. It cannot be changed or deleted.',
             downloadHtml: 'Download HTML',
             copyCode: 'Copy source',
             putOffline: 'Unpublish',
@@ -181,7 +198,7 @@ export default function DeploymentMarketplace({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState<'latest' | 'oldest' | 'mostViewed' | 'leastViewed'>('latest');
+  const [sortBy, setSortBy] = useState<'latest' | 'oldest' | 'mostViewed' | 'leastViewed' | 'mostLiked' | 'leastLiked'>('latest');
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -209,6 +226,7 @@ export default function DeploymentMarketplace({
     onConfirm: () => {},
   });
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
   const htmlCacheRef = useRef<Map<string, string>>(new Map());
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -252,6 +270,20 @@ export default function DeploymentMarketplace({
   useEffect(() => {
     fetchDeploys();
   }, [fetchDeploys]);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem('htmlcode-liked-deployments');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          setLikedIds(new Set(parsed.filter((item): item is string => typeof item === 'string')));
+        }
+      }
+    } catch {
+      setLikedIds(new Set());
+    }
+  }, []);
 
   useEffect(() => {
     setPage(1);
@@ -384,6 +416,45 @@ export default function DeploymentMarketplace({
     [fetchDeploymentHtml, text.copyFailed, text.copySuccess],
   );
 
+  const persistLikedIds = (nextLikedIds: Set<string>) => {
+    setLikedIds(nextLikedIds);
+    window.localStorage.setItem('htmlcode-liked-deployments', JSON.stringify(Array.from(nextLikedIds)));
+  };
+
+  const handleLike = useCallback(
+    async (deploy: Deployment) => {
+      if (likedIds.has(deploy.id) || deploy.status !== 'active') return;
+
+      try {
+        const res = await fetch(`/api/deploy/${deploy.id}/like`, {
+          method: 'POST',
+        });
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || text.likeFailed);
+        }
+
+        setDeploys((current) =>
+          current.map((item) =>
+            item.id === deploy.id
+              ? { ...item, likeCount: Number(data.likeCount ?? item.likeCount + 1) }
+              : item,
+          ),
+        );
+
+        const nextLikedIds = new Set(likedIds);
+        nextLikedIds.add(deploy.id);
+        persistLikedIds(nextLikedIds);
+        showToast(text.likeSuccess, 'success');
+      } catch (error) {
+        console.error('Like error', error);
+        showToast(text.likeFailed, 'error');
+      }
+    },
+    [likedIds, text.likeFailed, text.likeSuccess],
+  );
+
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US');
   };
@@ -442,6 +513,8 @@ export default function DeploymentMarketplace({
               <option value="oldest">{text.sortOldest}</option>
               <option value="mostViewed">{text.sortMostViewed}</option>
               <option value="leastViewed">{text.sortLeastViewed}</option>
+              <option value="mostLiked">{text.sortMostLiked}</option>
+              <option value="leastLiked">{text.sortLeastLiked}</option>
             </select>
             <select
               value={filter}
@@ -541,6 +614,10 @@ export default function DeploymentMarketplace({
                     <Eye className="mr-2 h-4 w-4" />
                     {text.views(deploy.viewCount)}
                   </div>
+                  <div className="flex items-center">
+                    <Heart className="mr-2 h-4 w-4" />
+                    {text.likes(deploy.likeCount)}
+                  </div>
                 </div>
 
                 <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4">
@@ -553,15 +630,19 @@ export default function DeploymentMarketplace({
                       <ExternalLink className="h-4 w-4" />
                     </Link>
                     {deploy.status === 'active' && (
-                      <a
-                        href={`/s/${deploy.code}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="rounded-md p-2 text-slate-400 transition-colors hover:text-emerald-600"
-                        title={text.visitPage}
+                      <button
+                        type="button"
+                        onClick={() => handleLike(deploy)}
+                        disabled={likedIds.has(deploy.id)}
+                        className={`rounded-md p-2 transition-colors ${
+                          likedIds.has(deploy.id)
+                            ? 'text-rose-500'
+                            : 'text-slate-400 hover:text-rose-500'
+                        }`}
+                        title={likedIds.has(deploy.id) ? text.likedProject : text.likeProject}
                       >
-                        <Eye className="h-4 w-4" />
-                      </a>
+                        <Heart className={`h-4 w-4 ${likedIds.has(deploy.id) ? 'fill-current' : ''}`} />
+                      </button>
                     )}
                     <button
                       onClick={() => handleDownload(deploy)}
@@ -582,17 +663,25 @@ export default function DeploymentMarketplace({
                   <div className="flex space-x-1">
                     <button
                       onClick={() => handleToggleStatus(deploy.id, deploy.status)}
+                      disabled={deploy.likeCount > 0}
                       className={`rounded-md p-2 transition-colors ${
-                        deploy.status === 'active' ? 'text-slate-400 hover:text-amber-500' : 'text-slate-400 hover:text-emerald-500'
+                        deploy.likeCount > 0
+                          ? 'cursor-not-allowed text-slate-300'
+                          : deploy.status === 'active'
+                            ? 'text-slate-400 hover:text-amber-500'
+                            : 'text-slate-400 hover:text-emerald-500'
                       }`}
-                      title={deploy.status === 'active' ? text.putOffline : text.relaunch}
+                      title={deploy.likeCount > 0 ? text.lockedProject : deploy.status === 'active' ? text.putOffline : text.relaunch}
                     >
                       {deploy.status === 'active' ? <PowerOff className="h-4 w-4" /> : <PlayCircle className="h-4 w-4" />}
                     </button>
                     <button
                       onClick={() => handleDelete(deploy.id)}
-                      className="rounded-md p-2 text-slate-400 transition-colors hover:text-rose-600"
-                      title={text.deleteForever}
+                      disabled={deploy.likeCount > 0}
+                      className={`rounded-md p-2 transition-colors ${
+                        deploy.likeCount > 0 ? 'cursor-not-allowed text-slate-300' : 'text-slate-400 hover:text-rose-600'
+                      }`}
+                      title={deploy.likeCount > 0 ? text.lockedProject : text.deleteForever}
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>

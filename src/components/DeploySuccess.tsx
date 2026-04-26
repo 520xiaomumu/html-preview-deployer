@@ -1,5 +1,6 @@
 'use client';
 
+/* eslint-disable @next/next/no-img-element */
 import React from 'react';
 import { ExternalLink, Copy, CheckCircle } from 'lucide-react';
 import Link from 'next/link';

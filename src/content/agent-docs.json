@@ -5,6 +5,7 @@
     "直接写代码：将完整 HTML 字符串写入 content 字段即可",
     "支持可选自定义短链：enableCustomCode=true + customCode",
     "已知 code 或 url，可通过 /api/deploy/content 读取、下载、更新 HTML",
+    "网页手动点赞后的项目会锁定，Agent API 只能读取，不能更新",
     "不要使用 -F file 或 multipart/form-data",
     "仅支持单个 HTML 内容，不支持批量部署",
     "冷却中返回 429，并提供 retryAfterSeconds",
@@ -17,6 +18,7 @@
     "仅支持单个 HTML 请求，不支持批量部署",
     "可选开启自定义短链：enableCustomCode=true + customCode",
     "已知短链 code 或 url，可读取、下载、更新对应 HTML 内容",
+    "网页手动点赞后的项目会锁定，Agent API 只能读取，不能更新",
     "每次部署成功后，全局冷却 10 秒",
     "冷却期间返回 429，并包含 retryAfterSeconds",
     "最大 HTML 体积 1 MB"
