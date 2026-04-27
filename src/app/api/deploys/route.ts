@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { DeploymentRow, supabase } from '@/lib/db';
 import { mapDeploymentRow } from '@/lib/deployment-mapper';
 import { getErrorMessage, isMissingLikeCountError } from '@/lib/error';
+import { jsonError } from '@/lib/api-response';
 
-const DEPLOYMENT_COLUMNS = 'id, code, title, filename, file_path, file_size, qr_code_path, created_at, updated_at, view_count, status';
+const DEPLOYMENT_COLUMNS = 'id, code, title, description, filename, file_path, file_size, qr_code_path, created_at, updated_at, view_count, status';
 const DEPLOYMENT_COLUMNS_WITH_LIKES = `${DEPLOYMENT_COLUMNS}, like_count`;
 
 function parseSort(sortBy: string | null, includeLikeCount = true) {
@@ -50,7 +51,7 @@ export async function GET(request: NextRequest) {
 
       if (keyword) {
         const escapedKeyword = keyword.replace(/,/g, '\\,').replace(/%/g, '\\%').replace(/_/g, '\\_');
-        query = query.or(`title.ilike.%${escapedKeyword}%,filename.ilike.%${escapedKeyword}%,code.ilike.%${escapedKeyword}%`);
+        query = query.or(`title.ilike.%${escapedKeyword}%,description.ilike.%${escapedKeyword}%,filename.ilike.%${escapedKeyword}%,code.ilike.%${escapedKeyword}%`);
       }
 
       return query
@@ -87,9 +88,11 @@ export async function GET(request: NextRequest) {
     });
   } catch (error: unknown) {
     console.error('Fetch deployments error:', error);
-    return NextResponse.json(
-      { error: getErrorMessage(error) },
-      { status: 500 }
-    );
+    return jsonError({
+      status: 500,
+      code: 'DEPLOYMENTS_FETCH_FAILED',
+      message: '获取部署列表失败。',
+      detail: getErrorMessage(error),
+    });
   }
 }

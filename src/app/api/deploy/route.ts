@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db';
 import QRCode from 'qrcode';
 import { randomBytes, randomUUID } from 'crypto';
-import { MAX_HTML_SIZE_BYTES, SHORT_CODE_PATTERN, isValidHtmlContent } from '@/lib/deploy-config';
+import { MAX_DESCRIPTION_LENGTH, MAX_HTML_SIZE_BYTES, SHORT_CODE_PATTERN, isValidHtmlContent } from '@/lib/deploy-config';
 import { getErrorMessage } from '@/lib/error';
+import { jsonError } from '@/lib/api-response';
 
 const COOLDOWN_SECONDS = 10;
 
@@ -20,20 +21,17 @@ type DeployFailOptions = {
 };
 
 function failResponse(options: DeployFailOptions) {
-  return NextResponse.json(
-    {
-      success: false,
-      error: options.message,
-      errorCode: options.code,
-      detail: options.detail,
-      hint: options.hint,
-      docs: options.docs,
-      stage: options.stage,
-      requestId: options.requestId,
-      retryAfterSeconds: options.retryAfterSeconds,
-    },
-    { status: options.status }
-  );
+  return jsonError({
+    status: options.status,
+    code: options.code,
+    message: options.message,
+    detail: options.detail,
+    hint: options.hint,
+    docs: options.docs,
+    stage: options.stage,
+    requestId: options.requestId,
+    retryAfterSeconds: options.retryAfterSeconds,
+  });
 }
 
 function getRetryAfterSeconds(lastSuccessAt: string | null) {
@@ -137,10 +135,11 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const { content, filename, title, enableCustomCode, customCode } = body as {
+    const { content, filename, title, description, enableCustomCode, customCode } = body as {
       content?: unknown;
       filename?: unknown;
       title?: unknown;
+      description?: unknown;
       enableCustomCode?: unknown;
       customCode?: unknown;
     };
@@ -205,6 +204,11 @@ export async function POST(request: NextRequest) {
         requestId,
       });
     }
+
+    const normalizedDescription =
+      typeof description === 'string' && description.trim()
+        ? description.trim().slice(0, MAX_DESCRIPTION_LENGTH)
+        : null;
 
     const customCodeEnabled = enableCustomCode === true;
     let resolvedCode: string;
@@ -394,6 +398,7 @@ export async function POST(request: NextRequest) {
       .insert({
         code,
         title: typeof title === 'string' && title.trim() ? title.trim() : normalizedFilename,
+        description: normalizedDescription,
         filename: normalizedFilename,
         file_path: htmlPublicUrl, // Storing the public URL for easy access
         file_size: fileSize,
@@ -437,6 +442,7 @@ export async function POST(request: NextRequest) {
       code: data.code,
       url: deployUrl,
       qrCode: qrPublicUrl,
+      description: data.description,
       requestId,
       cooldownSeconds: COOLDOWN_SECONDS,
       nextAvailableAt: new Date(Date.now() + COOLDOWN_SECONDS * 1000).toISOString(),

@@ -24,6 +24,7 @@ export interface Deployment {
   id: string;
   code: string;
   title: string;
+  description: string | null;
   filename: string;
   filePath: string;
   fileSize: number | null;
@@ -40,6 +41,7 @@ export interface DeploymentRow {
   id: string;
   code: string;
   title: string;
+  description: string | null;
   filename: string;
   file_path: string;
   file_size: number | null;

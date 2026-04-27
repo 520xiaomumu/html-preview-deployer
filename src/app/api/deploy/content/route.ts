@@ -5,6 +5,7 @@ import {
   MAX_HTML_SIZE_BYTES,
   SHORT_CODE_PATTERN,
   NO_STORE_CACHE_CONTROL,
+  MAX_DESCRIPTION_LENGTH,
   isValidHtmlContent,
   resolveCodeFromInput,
 } from '@/lib/deploy-config';
@@ -101,6 +102,7 @@ export async function GET(request: NextRequest) {
         code: deployment.code,
         status: deployment.status,
         title: deployment.title,
+        description: deployment.description,
         filename: deployment.filename,
         url: `${request.nextUrl.protocol}//${request.nextUrl.host}/s/${deployment.code}`,
         filePath: deployment.file_path,
@@ -241,6 +243,7 @@ export async function PATCH(request: NextRequest) {
       file_size: number;
       updated_at: string;
       title?: string;
+      description?: string | null;
       filename?: string;
       file_path?: string;
     } = {
@@ -255,6 +258,13 @@ export async function PATCH(request: NextRequest) {
 
     if (typeof body.title === 'string' && body.title.trim()) {
       updates.title = body.title.trim();
+    }
+
+    if (typeof body.description === 'string') {
+      const normalizedDescription = body.description.trim();
+      updates.description = normalizedDescription
+        ? normalizedDescription.slice(0, MAX_DESCRIPTION_LENGTH)
+        : null;
     }
 
     if (typeof body.filename === 'string' && body.filename.trim()) {

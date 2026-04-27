@@ -11,6 +11,7 @@ Required request format:
   - content: string, full HTML source
 - Optional field:
   - title: string
+  - description: string, one short sentence describing what the HTML page is (max 240 chars)
   - enableCustomCode: boolean (default false)
   - customCode: string (required only when enableCustomCode=true)
 
@@ -28,6 +29,7 @@ Do NOT use:
 Rate limit:
 - After each successful deploy, global cooldown is 10 seconds
 - During cooldown API returns 429 with retryAfterSeconds
+- 429 responses also include the standard Retry-After header
 
 Collaboration APIs (known code/url):
 - GET https://www.htmlcode.fun/api/deploy/content?code=abc123
@@ -35,13 +37,13 @@ Collaboration APIs (known code/url):
 - Download mode: add query download=1
 - PATCH https://www.htmlcode.fun/api/deploy/content
   - JSON body requires: code or url, and content
-  - Optional: title, filename
+  - Optional: title, description, filename
 
 Success response includes:
 - success, id, code, url, qrCode, requestId, cooldownSeconds, nextAvailableAt, customCodeEnabled
 
 Error response includes:
-- success=false, errorCode, error, detail, hint, docs, stage, requestId
+- success=false, errorCode, error, detail, hint, docs, stage, requestId, retryAfterSeconds
 
 Docs:
 - https://www.htmlcode.fun/api-docs
@@ -49,6 +51,7 @@ Docs:
 Homepage highlights:
 - 上传文件：先读取文件内容，再放入 JSON 的 content 字段
 - 直接写代码：将完整 HTML 字符串写入 content 字段即可
+- 建议填写 description，用一句话介绍你上传的 HTML 是什么
 - 支持可选自定义短链：enableCustomCode=true + customCode
 - 已知 code 或 url，可通过 /api/deploy/content 读取、下载、更新 HTML
 - 网页手动点赞后的项目会锁定，Agent API 只能读取，不能更新

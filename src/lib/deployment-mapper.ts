@@ -5,6 +5,7 @@ export function mapDeploymentRow(row: DeploymentRow): Deployment {
     id: row.id,
     code: row.code,
     title: row.title,
+    description: row.description,
     filename: row.filename,
     filePath: row.file_path,
     fileSize: row.file_size,

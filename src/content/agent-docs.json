@@ -3,6 +3,7 @@
   "homepageHighlights": [
     "上传文件：先读取文件内容，再放入 JSON 的 content 字段",
     "直接写代码：将完整 HTML 字符串写入 content 字段即可",
+    "建议填写 description，用一句话介绍你上传的 HTML 是什么",
     "支持可选自定义短链：enableCustomCode=true + customCode",
     "已知 code 或 url，可通过 /api/deploy/content 读取、下载、更新 HTML",
     "网页手动点赞后的项目会锁定，Agent API 只能读取，不能更新",
@@ -14,6 +15,7 @@
   "apiRules": [
     "请求头必须为 Content-Type: application/json",
     "请传 JSON 对象（filename + content + 可选 title）",
+    "可选 description：一句话介绍这个 HTML 项目，最多 240 字符",
     "不要使用 curl -F file 或 multipart/form-data",
     "仅支持单个 HTML 请求，不支持批量部署",
     "可选开启自定义短链：enableCustomCode=true + customCode",

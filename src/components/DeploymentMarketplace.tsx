@@ -15,6 +15,8 @@ import {
   HardDrive,
   Search,
   Heart,
+  Code2,
+  X,
 } from 'lucide-react';
 import { Deployment } from '@/lib/db';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -81,6 +83,7 @@ export default function DeploymentMarketplace({
             fetchListFailed: '获取部署列表失败，请稍后重试',
             fetchListFailedShort: '获取部署列表失败',
             fetchContentFailed: '获取内容失败',
+            loadingSource: '正在读取源码...',
             uploadAction: '上架',
             offlineAction: '下架',
             confirmAction: (action: string) => `确认${action}`,
@@ -117,6 +120,9 @@ export default function DeploymentMarketplace({
             lockedProject: '已被点赞锁定，不能修改或删除',
             downloadHtml: '下载 HTML 文件',
             copyCode: '复制代码',
+            viewCode: '查看代码',
+            sourceTitle: 'HTML 源码',
+            descriptionFallback: '暂无简介',
             putOffline: '下架',
             relaunch: '上架',
             deleteForever: '彻底删除',
@@ -144,6 +150,7 @@ export default function DeploymentMarketplace({
             fetchListFailed: 'Failed to fetch deployments, please try again later',
             fetchListFailedShort: 'Failed to fetch deployments',
             fetchContentFailed: 'Failed to load content',
+            loadingSource: 'Loading source...',
             uploadAction: 'publish',
             offlineAction: 'unpublish',
             confirmAction: (action: string) => `Confirm ${action}`,
@@ -184,6 +191,9 @@ export default function DeploymentMarketplace({
             lockedProject: 'Locked by likes. It cannot be changed or deleted.',
             downloadHtml: 'Download HTML',
             copyCode: 'Copy source',
+            viewCode: 'View source',
+            sourceTitle: 'HTML Source',
+            descriptionFallback: 'No description yet',
             putOffline: 'Unpublish',
             relaunch: 'Publish',
             deleteForever: 'Delete permanently',
@@ -231,6 +241,17 @@ export default function DeploymentMarketplace({
   });
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
+  const [sourceDialog, setSourceDialog] = useState<{
+    open: boolean;
+    title: string;
+    content: string;
+    loading: boolean;
+  }>({
+    open: false,
+    title: '',
+    content: '',
+    loading: false,
+  });
   const htmlCacheRef = useRef<Map<string, string>>(new Map());
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -420,6 +441,32 @@ export default function DeploymentMarketplace({
     [fetchDeploymentHtml, text.copyFailed, text.copySuccess],
   );
 
+  const handleViewCode = useCallback(
+    async (deploy: Deployment) => {
+      setSourceDialog({
+        open: true,
+        title: deploy.title,
+        content: '',
+        loading: true,
+      });
+
+      try {
+        const html = await fetchDeploymentHtml(deploy);
+        setSourceDialog({
+          open: true,
+          title: deploy.title,
+          content: html,
+          loading: false,
+        });
+      } catch (error) {
+        console.error('View source error', error);
+        setSourceDialog((current) => ({ ...current, loading: false }));
+        showToast(text.fetchContentFailed, 'error');
+      }
+    },
+    [fetchDeploymentHtml, text.fetchContentFailed],
+  );
+
   const persistLikedIds = (nextLikedIds: Set<string>) => {
     setLikedIds(nextLikedIds);
     window.localStorage.setItem('htmlcode-liked-deployments', JSON.stringify(Array.from(nextLikedIds)));
@@ -498,6 +545,29 @@ export default function DeploymentMarketplace({
         onConfirm={dialogState.onConfirm}
         onCancel={closeDialog}
       />
+      {sourceDialog.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4">
+          <div className="flex max-h-[86vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{text.sourceTitle}</p>
+                <h3 className="truncate text-lg font-semibold text-slate-900">{sourceDialog.title}</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSourceDialog({ open: false, title: '', content: '', loading: false })}
+                className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                title="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <pre className="min-h-[360px] overflow-auto bg-slate-950 p-5 text-xs leading-relaxed text-slate-100">
+              {sourceDialog.loading ? text.loadingSource : sourceDialog.content}
+            </pre>
+          </div>
+        </div>
+      )}
 
       {(resolvedTitle || resolvedSubtitle) && (
         <div className="space-y-2">
@@ -628,10 +698,13 @@ export default function DeploymentMarketplace({
                   <div className="flex items-center">
                     <Eye className="mr-2 h-4 w-4" />
                     {text.views(deploy.viewCount)}
+                    <Heart className="ml-4 mr-2 h-4 w-4" />
+                    {text.likes(deploy.likeCount)}
                   </div>
                   <div className="flex items-center">
-                    <Heart className="mr-2 h-4 w-4" />
-                    {text.likes(deploy.likeCount)}
+                    <span className="line-clamp-2 text-slate-500" title={deploy.description || text.descriptionFallback}>
+                      {deploy.description || text.descriptionFallback}
+                    </span>
                   </div>
                 </div>
 
@@ -671,6 +744,13 @@ export default function DeploymentMarketplace({
                       title={text.copyCode}
                     >
                       {copiedId === deploy.id ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+                    </button>
+                    <button
+                      onClick={() => handleViewCode(deploy)}
+                      className="rounded-md p-2 text-slate-400 transition-colors hover:text-violet-600"
+                      title={text.viewCode}
+                    >
+                      <Code2 className="h-4 w-4" />
                     </button>
                   </div>
 

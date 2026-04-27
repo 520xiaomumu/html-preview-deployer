@@ -3,6 +3,7 @@ import { DeploymentRow, supabase } from '@/lib/db';
 import { mapDeploymentRow } from '@/lib/deployment-mapper';
 import { listHtmlPathsByCode } from '@/lib/storage';
 import { getErrorMessage, isMissingLikeCountError } from '@/lib/error';
+import { jsonError } from '@/lib/api-response';
 
 async function fetchDeploymentLockState(id: string) {
   const { data, error } = await supabase
@@ -45,10 +46,12 @@ export async function GET(
       .single();
 
     if (error || !deployment) {
-      return NextResponse.json(
-        { error: 'Deployment not found' },
-        { status: 404 }
-      );
+      return jsonError({
+        status: 404,
+        code: 'DEPLOYMENT_NOT_FOUND',
+        message: '未找到对应部署。',
+        detail: error?.message,
+      });
     }
 
     const formattedDeployment = mapDeploymentRow(deployment as DeploymentRow);
@@ -72,26 +75,31 @@ export async function PATCH(
     const { status } = body;
 
     if (!['active', 'inactive'].includes(status)) {
-      return NextResponse.json(
-        { error: 'Invalid status' },
-        { status: 400 }
-      );
+      return jsonError({
+        status: 400,
+        code: 'INVALID_STATUS',
+        message: 'status 必须是 active 或 inactive。',
+      });
     }
 
     const lockState = await fetchDeploymentLockState(id);
 
     if (lockState.error || !lockState.found) {
-      return NextResponse.json(
-        { error: 'Deployment not found' },
-        { status: 404 }
-      );
+      return jsonError({
+        status: 404,
+        code: 'DEPLOYMENT_NOT_FOUND',
+        message: '未找到对应部署。',
+        detail: lockState.error,
+      });
     }
 
     if (lockState.locked) {
-      return NextResponse.json(
-        { error: 'This deployment has likes and is locked.' },
-        { status: 423 }
-      );
+      return jsonError({
+        status: 423,
+        code: 'DEPLOYMENT_LOCKED_BY_LIKE',
+        message: '该项目已被手动点赞，不能上下架。',
+        hint: '如需修改状态，请先在网页中取消点赞，或创建一个新部署。',
+      });
     }
 
     const { error } = await supabase
@@ -100,18 +108,22 @@ export async function PATCH(
       .eq('id', id);
 
     if (error) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: 500 }
-      );
+      return jsonError({
+        status: 500,
+        code: 'DEPLOYMENT_STATUS_UPDATE_FAILED',
+        message: '部署状态更新失败。',
+        detail: error.message,
+      });
     }
 
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
-    return NextResponse.json(
-      { error: getErrorMessage(error) },
-      { status: 500 }
-    );
+    return jsonError({
+      status: 500,
+      code: 'INTERNAL_ERROR',
+      message: '部署状态更新失败。',
+      detail: getErrorMessage(error),
+    });
   }
 }
 
@@ -141,19 +153,23 @@ export async function DELETE(
     }
 
     if (fetchError || !deployment) {
-      return NextResponse.json(
-        { error: 'Deployment not found' },
-        { status: 404 }
-      );
+      return jsonError({
+        status: 404,
+        code: 'DEPLOYMENT_NOT_FOUND',
+        message: '未找到对应部署。',
+        detail: fetchError?.message,
+      });
     }
 
     const { code } = deployment;
 
     if (Number(deployment.like_count ?? 0) > 0) {
-      return NextResponse.json(
-        { error: 'This deployment has likes and is locked.' },
-        { status: 423 }
-      );
+      return jsonError({
+        status: 423,
+        code: 'DEPLOYMENT_LOCKED_BY_LIKE',
+        message: '该项目已被手动点赞，不能删除。',
+        hint: '如需删除，请先在网页中取消点赞。',
+      });
     }
 
     const bucket = supabase.storage.from('deployments');
@@ -185,17 +201,21 @@ export async function DELETE(
       .eq('id', id);
 
     if (deleteError) {
-      return NextResponse.json(
-        { error: deleteError.message },
-        { status: 500 }
-      );
+      return jsonError({
+        status: 500,
+        code: 'DEPLOYMENT_DELETE_FAILED',
+        message: '部署删除失败。',
+        detail: deleteError.message,
+      });
     }
 
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
-    return NextResponse.json(
-      { error: getErrorMessage(error) },
-      { status: 500 }
-    );
+    return jsonError({
+      status: 500,
+      code: 'INTERNAL_ERROR',
+      message: '部署删除失败。',
+      detail: getErrorMessage(error),
+    });
   }
 }
