@@ -1,31 +1,30 @@
 {
-  "name": "html-preview-deployer",
+  "name": "htmlteam",
   "version": "0.1.0",
   "private": true,
+  "description": "Agent-native HTML deployment API and CLI.",
+  "bin": {
+    "htmlteam": "./src/cli/htmlteam.mjs"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "docs:sync-llms": "node scripts/sync-llms.mjs",
-    "smoke:prod": "node scripts/smoke-prod.mjs",
-    "vercel:link": "npx vercel link",
-    "vercel:env:pull": "npx vercel env pull .env.local",
+    "cli": "node src/cli/htmlteam.mjs",
+    "smoke:cli": "node src/cli/htmlteam.mjs --help",
     "supabase:login": "npx supabase login",
     "supabase:link": "npx supabase link",
     "supabase:db:push": "npx supabase db push",
-    "supabase:db:reset": "npx supabase db reset"
+    "vercel:link": "npx vercel link",
+    "vercel:env:pull": "npx vercel env pull .env.local"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.93.3",
-    "clsx": "^2.1.1",
-    "lucide-react": "^0.563.0",
     "next": "16.1.6",
-    "pg": "^8.20.0",
     "qrcode": "^1.5.4",
     "react": "19.2.3",
-    "react-dom": "19.2.3",
-    "tailwind-merge": "^3.4.0"
+    "react-dom": "19.2.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
