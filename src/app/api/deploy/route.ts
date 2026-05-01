@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db';
 import QRCode from 'qrcode';
 import { randomBytes, randomUUID } from 'crypto';
-import { MAX_DESCRIPTION_LENGTH, MAX_HTML_SIZE_BYTES, SHORT_CODE_PATTERN, isValidHtmlContent } from '@/lib/deploy-config';
+import { MAX_HTML_SIZE_BYTES, SHORT_CODE_PATTERN, isValidHtmlContent, normalizeDescription } from '@/lib/deploy-config';
 import { getErrorMessage } from '@/lib/error';
 import { jsonError } from '@/lib/api-response';
 
@@ -205,11 +205,6 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const normalizedDescription =
-      typeof description === 'string' && description.trim()
-        ? description.trim().slice(0, MAX_DESCRIPTION_LENGTH)
-        : null;
-
     const customCodeEnabled = enableCustomCode === true;
     let resolvedCode: string;
 
@@ -398,7 +393,7 @@ export async function POST(request: NextRequest) {
       .insert({
         code,
         title: typeof title === 'string' && title.trim() ? title.trim() : normalizedFilename,
-        description: normalizedDescription,
+        description: normalizeDescription(description),
         filename: normalizedFilename,
         file_path: htmlPublicUrl, // Storing the public URL for easy access
         file_size: fileSize,

@@ -28,6 +28,8 @@ interface DeploymentMarketplaceProps {
   subtitle?: string;
 }
 
+type SortBy = 'latest' | 'oldest' | 'mostViewed' | 'leastViewed' | 'mostLiked' | 'leastLiked';
+
 function formatFileSize(bytes: number | null | undefined) {
   if (bytes == null || Number.isNaN(bytes)) return null;
   if (bytes < 1024) return `${bytes} B`;
@@ -114,7 +116,6 @@ export default function DeploymentMarketplace({
             views: (count: number) => `${count} 次访问`,
             likes: (count: number) => `${count} 个赞`,
             detailTitle: '查看详情',
-            visitPage: '访问页面',
             likeProject: '点赞并锁定项目',
             likedProject: '取消点赞',
             lockedProject: '已被点赞锁定，不能修改或删除',
@@ -185,7 +186,6 @@ export default function DeploymentMarketplace({
             views: (count: number) => `${count} views`,
             likes: (count: number) => `${count} likes`,
             detailTitle: 'View details',
-            visitPage: 'Visit page',
             likeProject: 'Like and lock project',
             likedProject: 'Remove like',
             lockedProject: 'Locked by likes. It cannot be changed or deleted.',
@@ -212,7 +212,7 @@ export default function DeploymentMarketplace({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState<'latest' | 'oldest' | 'mostViewed' | 'leastViewed' | 'mostLiked' | 'leastLiked'>('latest');
+  const [sortBy, setSortBy] = useState<SortBy>('latest');
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -591,7 +591,7 @@ export default function DeploymentMarketplace({
             </div>
             <select
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as 'latest' | 'oldest' | 'mostViewed' | 'leastViewed')}
+              onChange={(e) => setSortBy(e.target.value as SortBy)}
               className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none ring-sky-300 transition focus:border-sky-400 focus:ring-2"
             >
               <option value="latest">{text.sortLatest}</option>

@@ -5,8 +5,8 @@ import {
   MAX_HTML_SIZE_BYTES,
   SHORT_CODE_PATTERN,
   NO_STORE_CACHE_CONTROL,
-  MAX_DESCRIPTION_LENGTH,
   isValidHtmlContent,
+  normalizeDescription,
   resolveCodeFromInput,
 } from '@/lib/deploy-config';
 import { createVersionedHtmlPath, getStoragePathFromFilePath } from '@/lib/storage';
@@ -261,10 +261,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (typeof body.description === 'string') {
-      const normalizedDescription = body.description.trim();
-      updates.description = normalizedDescription
-        ? normalizedDescription.slice(0, MAX_DESCRIPTION_LENGTH)
-        : null;
+      updates.description = normalizeDescription(body.description);
     }
 
     if (typeof body.filename === 'string' && body.filename.trim()) {

@@ -10,6 +10,11 @@ export function isValidHtmlContent(content: string) {
   return /(<!doctype html|<html[\s>])/i.test(content);
 }
 
+export function normalizeDescription(description: unknown) {
+  const normalizedDescription = typeof description === 'string' ? description.trim() : '';
+  return normalizedDescription ? normalizedDescription.slice(0, MAX_DESCRIPTION_LENGTH) : null;
+}
+
 export function resolveCodeFromInput(input: { code?: unknown; url?: unknown }): string | null {
   if (typeof input.code === 'string' && input.code.trim()) {
     return input.code.trim().toLowerCase();
