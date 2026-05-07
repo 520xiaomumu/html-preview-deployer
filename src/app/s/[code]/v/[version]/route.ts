@@ -37,12 +37,12 @@ export async function GET(
 
     const { data: selectedVersion, error: versionError } = await supabase
       .from('deployment_versions')
-      .select('file_path')
+      .select('file_path, status')
       .eq('deployment_id', deployment.id)
       .eq('version_number', versionNumber)
       .maybeSingle();
 
-    if (versionError || !selectedVersion) {
+    if (versionError || !selectedVersion || (!isPreview && selectedVersion.status === 'inactive')) {
       return new NextResponse('Deployment version not found', { status: 404 });
     }
 

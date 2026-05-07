@@ -76,6 +76,14 @@ export async function PATCH(
       });
     }
 
+    if (version.status === 'inactive') {
+      return jsonError({
+        status: 409,
+        code: 'DEPLOYMENT_VERSION_INACTIVE',
+        message: '已下架版本不能设为当前版本。',
+      });
+    }
+
     const updatedAt = new Date().toISOString();
     const { error: updateError } = await supabase
       .from('deployments')

@@ -9,6 +9,8 @@ const endpoints = [
   ['GET', '/api/deploy/content?code={code}', 'Read HTML metadata and source. Add version={number} for history.'],
   ['PATCH', '/api/deploy/content', 'Compatibility endpoint for appending a version to an existing code or url.'],
   ['GET', '/api/deploys/{code}/versions', 'List version history.'],
+  ['PATCH', '/api/deploys/{code}/versions/{version}', 'Overwrite an unlocked version, or set status=active/inactive for one version.'],
+  ['DELETE', '/api/deploys/{code}/versions/{version}', 'Delete one unlocked version.'],
   ['PATCH', '/api/deploys/{code}/current', 'Switch the public current version.'],
 ];
 
@@ -24,6 +26,10 @@ const workflows = [
   {
     name: 'Inspect or reuse an app',
     steps: 'GET /api/deploys/{code}/versions -> GET /api/deploy/content?code=...&version=...',
+  },
+  {
+    name: 'Overwrite unlocked version',
+    steps: 'PATCH /api/deploys/{code}/versions/{version} with content + description when likeCount=0',
   },
 ];
 
@@ -59,7 +65,7 @@ export default function ApiDocsPage() {
         endpointTitle: '接口速览',
         firstDeploy: '普通部署示例',
         recurring: '周期更新项目示例',
-        recurringNote: '日报、周报、榜单等周期内容复用稳定 customCode，并通过 createVersion=true 追加版本。',
+        recurringNote: '日报、周报、榜单等周期内容复用稳定 customCode，并通过 createVersion=true 追加版本；若要修正某个未点赞版本，可按短链和版本号覆盖。',
       }
     : {
         title: 'API / OpenAPI Docs',
@@ -72,7 +78,7 @@ export default function ApiDocsPage() {
         endpointTitle: 'Endpoints',
         firstDeploy: 'Basic Deploy Example',
         recurring: 'Recurring Project Example',
-        recurringNote: 'Daily reports, weekly reports, rankings, and similar recurring content should reuse a stable customCode and append with createVersion=true.',
+        recurringNote: 'Daily reports, weekly reports, rankings, and similar recurring content should reuse a stable customCode and append with createVersion=true; fix an unlocked version by code and version number.',
       };
 
   return (
@@ -104,7 +110,7 @@ export default function ApiDocsPage() {
       <section className="rounded-lg border border-sky-200 bg-sky-50 p-5 space-y-3">
         <h2 className="text-lg font-semibold text-slate-900">{text.workflowTitle}</h2>
         <p className="text-sm text-slate-700">{text.workflowIntro}</p>
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-4">
           {workflows.map((workflow) => (
             <div key={workflow.name} className="rounded-lg border border-sky-100 bg-white p-3">
               <p className="text-sm font-semibold text-slate-900">{workflow.name}</p>

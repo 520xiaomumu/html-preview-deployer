@@ -1,12 +1,13 @@
 import { DeploymentVersionRow } from '@/lib/db';
 
-type PrimaryVersionCandidate = Pick<DeploymentVersionRow, 'id' | 'version_number' | 'like_count'>;
+type PrimaryVersionCandidate = Pick<DeploymentVersionRow, 'id' | 'version_number' | 'like_count' | 'status'>;
 
 export function selectPrimaryVersion<T extends PrimaryVersionCandidate>(
   versions: T[],
   currentVersionId?: string | null,
 ) {
-  const likedVersions = versions
+  const activeVersions = versions.filter((version) => (version.status || 'active') === 'active');
+  const likedVersions = activeVersions
     .filter((version) => Number(version.like_count ?? 0) > 0)
     .sort((a, b) => {
       const likeDiff = Number(b.like_count ?? 0) - Number(a.like_count ?? 0);
@@ -14,7 +15,7 @@ export function selectPrimaryVersion<T extends PrimaryVersionCandidate>(
     });
 
   return likedVersions[0]
-    || versions.find((version) => version.id === currentVersionId)
-    || versions[0]
+    || activeVersions.find((version) => version.id === currentVersionId)
+    || activeVersions[0]
     || null;
 }

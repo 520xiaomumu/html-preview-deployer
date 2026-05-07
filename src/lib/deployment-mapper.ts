@@ -32,5 +32,6 @@ export function mapDeploymentVersionRow(row: DeploymentVersionRow): DeploymentVe
     fileSize: row.file_size,
     createdAt: row.created_at,
     likeCount: row.like_count ?? 0,
+    status: row.status || 'active',
   };
 }

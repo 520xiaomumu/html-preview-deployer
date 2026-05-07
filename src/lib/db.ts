@@ -49,6 +49,7 @@ export interface DeploymentVersion {
   fileSize: number | null;
   createdAt: string;
   likeCount: number;
+  status: 'active' | 'inactive';
 }
 
 // Interface for Database Row (snake_case, matches Supabase)
@@ -81,4 +82,5 @@ export interface DeploymentVersionRow {
   file_size: number | null;
   created_at: string;
   like_count: number | null;
+  status?: 'active' | 'inactive' | null;
 }

@@ -80,6 +80,7 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
             versionLikes: (count: number) => `${count} 赞`,
             active: '运行中',
             inactive: '已下架',
+            versionInactive: '已下架',
             primaryVersionRule: '主域名由最高赞版本决定',
             primaryVersion: '主版本',
             qrcodeAlt: '部署二维码',
@@ -88,6 +89,14 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
             unpublishDeploy: '下架部署',
             deleteForever: '彻底删除',
             lockedByLike: '该项目已被点赞锁定，不能下架、上架或删除。',
+            versionLockedByLike: '该版本已被点赞锁定，不能覆盖、下架或删除。',
+            unpublishVersion: '下架该版本',
+            republishVersion: '上架该版本',
+            deleteVersion: '删除该版本',
+            confirmVersionStatusMsg: (action: string, version: number) => `确定要${action} v${version} 吗？`,
+            confirmDeleteVersionMsg: (version: number) => `确定要删除 v${version} 吗？该版本文件和记录将无法恢复。`,
+            versionStatusDone: (action: string) => `已${action}`,
+            versionDeleted: '已删除该版本',
             likePrimary: '点赞主域名当前版本',
             unlikePrimary: '取消主版本点赞',
             likeVersion: '点赞该版本',
@@ -116,9 +125,9 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
             copyFailed: '复制失败',
             downloadFailed: '下载失败',
             fetchContentFailed: '读取源码失败',
-            saveAsNew: '保存为新版本',
-            saveDone: '已保存为新版本',
-            saveFailed: '保存新版本失败',
+            overwriteVersion: '覆盖该版本',
+            overwriteDone: '已覆盖该版本',
+            overwriteFailed: '覆盖版本失败',
             switchDone: '已切换当前版本',
             switchFailed: '切换当前版本失败',
             emptyVersions: '暂无版本历史',
@@ -152,6 +161,7 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
             versionLikes: (count: number) => `${count} likes`,
             active: 'Active',
             inactive: 'Offline',
+            versionInactive: 'Offline',
             primaryVersionRule: 'The main URL follows the most-liked version',
             primaryVersion: 'Main version',
             qrcodeAlt: 'Deployment QR code',
@@ -160,6 +170,14 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
             unpublishDeploy: 'Unpublish Deployment',
             deleteForever: 'Delete Permanently',
             lockedByLike: 'This project has likes and is locked from status changes or deletion.',
+            versionLockedByLike: 'This version has likes and cannot be overwritten, unpublished, or deleted.',
+            unpublishVersion: 'Unpublish version',
+            republishVersion: 'Republish version',
+            deleteVersion: 'Delete version',
+            confirmVersionStatusMsg: (action: string, version: number) => `Are you sure you want to ${action} v${version}?`,
+            confirmDeleteVersionMsg: (version: number) => `Delete v${version}? This version file and record cannot be restored.`,
+            versionStatusDone: (action: string) => `${action} successful`,
+            versionDeleted: 'Version deleted',
             likePrimary: 'Like the current main version',
             unlikePrimary: 'Remove main-version like',
             likeVersion: 'Like this version',
@@ -188,9 +206,9 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
             copyFailed: 'Copy failed',
             downloadFailed: 'Download failed',
             fetchContentFailed: 'Failed to read source',
-            saveAsNew: 'Save as new version',
-            saveDone: 'Saved as a new version',
-            saveFailed: 'Failed to save new version',
+            overwriteVersion: 'Overwrite this version',
+            overwriteDone: 'Version overwritten',
+            overwriteFailed: 'Failed to overwrite version',
             switchDone: 'Current version switched',
             switchFailed: 'Failed to switch current version',
             emptyVersions: 'No version history yet',
@@ -275,20 +293,20 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
   }, [fetchDeploy, id, router, text.fetchFailed]);
 
   const versions = useMemo(() => deploy?.versions || [], [deploy?.versions]);
+  const activeVersions = useMemo(() => versions.filter((version) => version.status === 'active'), [versions]);
   const currentVersion = useMemo(() => {
     if (!deploy) return null;
-    return versions.find((version) => version.id === deploy.currentVersionId) || versions[0] || null;
-  }, [deploy, versions]);
+    return activeVersions.find((version) => version.id === deploy.currentVersionId) || activeVersions[0] || versions[0] || null;
+  }, [activeVersions, deploy, versions]);
   const primaryVersion = useMemo(() => {
     if (!deploy) return null;
-    return versions.find((version) => version.id === deploy.primaryVersionId)
-      || versions
+    return activeVersions.find((version) => version.id === deploy.primaryVersionId)
+      || activeVersions
         .filter((version) => version.likeCount > 0)
         .sort((a, b) => b.likeCount - a.likeCount || b.versionNumber - a.versionNumber)[0]
       || currentVersion
-      || versions[0]
       || null;
-  }, [currentVersion, deploy, versions]);
+  }, [activeVersions, currentVersion, deploy]);
   const selectedVersion = useMemo(() => {
     if (!deploy) return null;
     return versions.find((version) => version.id === selectedVersionId)
@@ -559,6 +577,69 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
     }
   };
 
+  const handleToggleVersionStatus = async (version: DeploymentVersion) => {
+    if (!deploy) return;
+    if (version.likeCount > 0) {
+      showToast(text.versionLockedByLike, 'info');
+      return;
+    }
+
+    const nextStatus = version.status === 'active' ? 'inactive' : 'active';
+    const actionName = nextStatus === 'active' ? text.republishVersion : text.unpublishVersion;
+    showDialog(
+      nextStatus === 'inactive' ? 'warning' : 'info',
+      text.confirmAction(actionName),
+      text.confirmVersionStatusMsg(actionName, version.versionNumber),
+      async () => {
+        try {
+          const res = await fetch(`/api/deploys/${deploy.code}/versions/${version.versionNumber}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: nextStatus }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            throw new Error(data.error || text.actionFailed(actionName));
+          }
+          htmlCacheRef.current.clear();
+          showToast(text.versionStatusDone(actionName), 'success');
+          await fetchDeploy(id);
+        } catch (error) {
+          console.error('Toggle version status error', error);
+          showToast(text.actionFailed(actionName), 'error');
+        }
+      },
+    );
+  };
+
+  const handleDeleteVersion = async (version: DeploymentVersion) => {
+    if (!deploy) return;
+    if (version.likeCount > 0) {
+      showToast(text.versionLockedByLike, 'info');
+      return;
+    }
+
+    showDialog('danger', text.deleteVersion, text.confirmDeleteVersionMsg(version.versionNumber), async () => {
+      try {
+        const res = await fetch(`/api/deploys/${deploy.code}/versions/${version.versionNumber}`, {
+          method: 'DELETE',
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || text.actionFailed(text.deleteVersion));
+        }
+
+        htmlCacheRef.current.clear();
+        setSelectedVersionId(null);
+        showToast(text.versionDeleted, 'success');
+        await fetchDeploy(id);
+      } catch (error) {
+        console.error('Delete version error', error);
+        showToast(text.actionFailed(text.deleteVersion), 'error');
+      }
+    });
+  };
+
   const handleCopySource = async (version: DeploymentVersion) => {
     try {
       const html = await fetchVersionHtml(version);
@@ -637,15 +718,18 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
     }
   };
 
-  const handleSaveSourceAsNewVersion = async () => {
+  const handleOverwriteVersion = async () => {
     if (!deploy || !sourceDialog.version) return;
+    if (sourceDialog.version.likeCount > 0) {
+      showToast(text.versionLockedByLike, 'info');
+      return;
+    }
     setSourceDialog((current) => ({ ...current, saving: true }));
     try {
-      const res = await fetch('/api/deploy/content', {
+      const res = await fetch(`/api/deploys/${deploy.code}/versions/${sourceDialog.version.versionNumber}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          code: deploy.code,
           content: sourceDialog.draft,
           title: sourceDialog.version.title || deploy.title,
           description: sourceDialog.version.description || deploy.description || sourceDialog.version.title || deploy.title,
@@ -654,12 +738,11 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
-        throw new Error(data.error || text.saveFailed);
+        throw new Error(data.error || text.overwriteFailed);
       }
 
       htmlCacheRef.current.clear();
-      setSelectedVersionId(null);
-      showToast(text.saveDone, 'success');
+      showToast(text.overwriteDone, 'success');
       setSourceDialog({
         open: false,
         version: null,
@@ -670,9 +753,9 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
       });
       await fetchDeploy(id);
     } catch (error) {
-      console.error('Save source error', error);
+      console.error('Overwrite version error', error);
       setSourceDialog((current) => ({ ...current, saving: false }));
-      showToast(text.saveFailed, 'error');
+      showToast(text.overwriteFailed, 'error');
     }
   };
 
@@ -770,12 +853,18 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
                 )}
                 <button
                   type="button"
-                  onClick={handleSaveSourceAsNewVersion}
-                  disabled={sourceDialog.loading || sourceDialog.saving || !sourceDialog.draft.trim()}
+                  onClick={handleOverwriteVersion}
+                  disabled={
+                    sourceDialog.loading
+                    || sourceDialog.saving
+                    || !sourceDialog.draft.trim()
+                    || Number(sourceDialog.version?.likeCount ?? 0) > 0
+                  }
                   className="inline-flex items-center rounded-lg bg-sky-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  title={Number(sourceDialog.version?.likeCount ?? 0) > 0 ? text.versionLockedByLike : undefined}
                 >
                   <Save className="mr-2 h-4 w-4" />
-                  {sourceDialog.saving ? text.loadingSource : text.saveAsNew}
+                  {sourceDialog.saving ? text.loadingSource : text.overwriteVersion}
                 </button>
               </div>
             </div>
@@ -924,6 +1013,8 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
                 const isCurrent = version.id === deploy.currentVersionId;
                 const isPrimary = version.id === primaryVersion?.id;
                 const isSelected = version.id === selectedVersion?.id;
+                const isVersionInactive = version.status === 'inactive';
+                const isVersionLocked = version.likeCount > 0;
                 const publicVersionUrl = getVersionUrl(version);
                 const publicVersionSuffix = getVersionSuffix(version);
                 return (
@@ -941,7 +1032,9 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
                     className={`rounded-xl border p-3 text-left transition ${
                       isSelected
                         ? 'border-sky-300 bg-sky-50/90 shadow-sm'
-                        : isCurrent
+                        : isVersionInactive
+                          ? 'border-slate-200 bg-slate-50/70'
+                          : isCurrent
                           ? 'border-emerald-200 bg-emerald-50/60'
                           : 'border-slate-200 bg-white hover:border-slate-300'
                     }`}
@@ -958,6 +1051,11 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
                           {isPrimary && (
                             <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold text-violet-700">
                               {text.primaryVersion}
+                            </span>
+                          )}
+                          {isVersionInactive && (
+                            <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                              {text.versionInactive}
                             </span>
                           )}
                         </div>
@@ -1088,11 +1186,41 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
                           event.stopPropagation();
                           handleSwitchVersion(version);
                         }}
-                        disabled={isCurrent}
+                        disabled={isCurrent || isVersionInactive}
                         className="rounded-md p-2 text-slate-400 transition hover:bg-white hover:text-emerald-600 disabled:cursor-not-allowed disabled:text-slate-300"
-                        title={isCurrent ? text.alreadyCurrent : text.switchCurrent}
+                        title={isCurrent ? text.alreadyCurrent : isVersionInactive ? text.versionInactive : text.switchCurrent}
                       >
                         <RotateCcw className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleToggleVersionStatus(version);
+                        }}
+                        disabled={isVersionLocked}
+                        className="rounded-md p-2 text-slate-400 transition hover:bg-white hover:text-amber-600 disabled:cursor-not-allowed disabled:text-slate-300"
+                        title={
+                          isVersionLocked
+                            ? text.versionLockedByLike
+                            : isVersionInactive
+                              ? text.republishVersion
+                              : text.unpublishVersion
+                        }
+                      >
+                        {isVersionInactive ? <PlayCircle className="h-4 w-4" /> : <PowerOff className="h-4 w-4" />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleDeleteVersion(version);
+                        }}
+                        disabled={isVersionLocked}
+                        className="rounded-md p-2 text-slate-400 transition hover:bg-white hover:text-rose-600 disabled:cursor-not-allowed disabled:text-slate-300"
+                        title={isVersionLocked ? text.versionLockedByLike : text.deleteVersion}
+                      >
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
                   </div>

@@ -47,7 +47,7 @@ export async function GET(
 
     const { data: versions, error: versionsError } = await supabase
       .from('deployment_versions')
-      .select('id, version_number, file_path, like_count')
+      .select('id, version_number, file_path, like_count, status')
       .eq('deployment_id', deployment.id)
       .order('version_number', { ascending: false });
 
