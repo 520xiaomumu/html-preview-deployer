@@ -7,7 +7,6 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "docs:sync-llms": "node scripts/sync-llms.mjs",
     "smoke:prod": "node scripts/smoke-prod.mjs",
     "vercel:link": "npx vercel link",
     "vercel:env:pull": "npx vercel env pull .env.local",

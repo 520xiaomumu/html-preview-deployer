@@ -7,9 +7,24 @@ import { useLanguage } from '@/components/LanguageProvider';
 const endpoints = [
   ['POST', '/api/deploy', 'Deploy one HTML page. Agents should always include a short description.'],
   ['GET', '/api/deploy/content?code={code}', 'Read HTML metadata and source. Add version={number} for history.'],
-  ['PATCH', '/api/deploy/content', 'Append an HTML version to an existing code or url.'],
+  ['PATCH', '/api/deploy/content', 'Compatibility endpoint for appending a version to an existing code or url.'],
   ['GET', '/api/deploys/{code}/versions', 'List version history.'],
   ['PATCH', '/api/deploys/{code}/current', 'Switch the public current version.'],
+];
+
+const workflows = [
+  {
+    name: 'New HTML app',
+    steps: 'POST /api/deploy -> use returned url/code/versionUrl',
+  },
+  {
+    name: 'Stable link or recurring update',
+    steps: 'POST /api/deploy with enableCustomCode=true + customCode; add createVersion=true for the next version',
+  },
+  {
+    name: 'Inspect or reuse an app',
+    steps: 'GET /api/deploys/{code}/versions -> GET /api/deploy/content?code=...&version=...',
+  },
 ];
 
 const deployExample = `{
@@ -39,6 +54,8 @@ export default function ApiDocsPage() {
         openapi: 'OpenAPI JSON',
         intro: 'Agent 优先读取 OpenAPI；直接部署时必须使用 application/json，不要用 multipart/form-data。',
         ruleTitle: 'Agent 使用规则',
+        workflowTitle: '推荐 Agent 工作流',
+        workflowIntro: '这些不是唯一用法，只是最高频路径，帮助 Agent 少猜一步。',
         endpointTitle: '接口速览',
         firstDeploy: '普通部署示例',
         recurring: '周期更新项目示例',
@@ -50,6 +67,8 @@ export default function ApiDocsPage() {
         openapi: 'OpenAPI JSON',
         intro: 'Agents should read OpenAPI first. Deployments must use application/json, never multipart/form-data.',
         ruleTitle: 'Agent Rules',
+        workflowTitle: 'Recommended Agent Workflows',
+        workflowIntro: 'These are not the only valid paths; they are the most common routes so agents can act with less guessing.',
         endpointTitle: 'Endpoints',
         firstDeploy: 'Basic Deploy Example',
         recurring: 'Recurring Project Example',
@@ -80,6 +99,19 @@ export default function ApiDocsPage() {
             <li key={item}>{item}</li>
           ))}
         </ul>
+      </section>
+
+      <section className="rounded-lg border border-sky-200 bg-sky-50 p-5 space-y-3">
+        <h2 className="text-lg font-semibold text-slate-900">{text.workflowTitle}</h2>
+        <p className="text-sm text-slate-700">{text.workflowIntro}</p>
+        <div className="grid gap-3 md:grid-cols-3">
+          {workflows.map((workflow) => (
+            <div key={workflow.name} className="rounded-lg border border-sky-100 bg-white p-3">
+              <p className="text-sm font-semibold text-slate-900">{workflow.name}</p>
+              <p className="mt-2 text-xs leading-relaxed text-slate-600">{workflow.steps}</p>
+            </div>
+          ))}
+        </div>
       </section>
 
       <section className="rounded-lg border border-gray-200 bg-white p-5 space-y-3">
