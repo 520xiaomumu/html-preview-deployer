@@ -23,6 +23,7 @@ export const supabase = createClient(supabaseUrl, supabaseServiceKey);
 export interface Deployment {
   id: string;
   code: string;
+  currentVersionId: string | null;
   title: string;
   description: string | null;
   filename: string;
@@ -36,10 +37,23 @@ export interface Deployment {
   status: 'active' | 'inactive';
 }
 
+export interface DeploymentVersion {
+  id: string;
+  deploymentId: string;
+  versionNumber: number;
+  title: string | null;
+  description: string | null;
+  filename: string;
+  filePath: string;
+  fileSize: number | null;
+  createdAt: string;
+}
+
 // Interface for Database Row (snake_case, matches Supabase)
 export interface DeploymentRow {
   id: string;
   code: string;
+  current_version_id: string | null;
   title: string;
   description: string | null;
   filename: string;
@@ -51,4 +65,16 @@ export interface DeploymentRow {
   view_count: number;
   like_count: number | null;
   status: 'active' | 'inactive';
+}
+
+export interface DeploymentVersionRow {
+  id: string;
+  deployment_id: string;
+  version_number: number;
+  title: string | null;
+  description: string | null;
+  filename: string;
+  file_path: string;
+  file_size: number | null;
+  created_at: string;
 }

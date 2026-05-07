@@ -15,12 +15,39 @@ import { getErrorMessage } from '@/lib/error';
 
 export const dynamic = 'force-dynamic';
 
+type DeploymentVersionRecord = {
+  id: string;
+  version_number: number;
+  filename: string;
+  file_path: string;
+  file_size: number | null;
+  title: string | null;
+  description: string | null;
+  created_at: string;
+};
+
 async function fetchDeploymentByCode(code: string) {
   return supabase
     .from('deployments')
     .select('*')
     .eq('code', code)
     .maybeSingle();
+}
+
+async function getNextVersionNumber(deploymentId: string) {
+  const { data, error } = await supabase
+    .from('deployment_versions')
+    .select('version_number')
+    .eq('deployment_id', deploymentId)
+    .order('version_number', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return Number(data?.version_number ?? 0) + 1;
 }
 
 function resolveStoragePath(deployment: { file_path?: string | null }, code: string) {
@@ -38,6 +65,25 @@ async function readHtmlContent(storagePath: string) {
 
   const content = await fileData.text();
   return { error: null, content };
+}
+
+async function fetchRequestedVersion(deploymentId: string, requestedVersion: string | null) {
+  if (!requestedVersion) return { version: null, error: null };
+
+  const versionQuery = supabase
+    .from('deployment_versions')
+    .select('*')
+    .eq('deployment_id', deploymentId);
+
+  const parsedVersionNumber = Number(requestedVersion);
+  const result = Number.isInteger(parsedVersionNumber) && parsedVersionNumber > 0
+    ? await versionQuery.eq('version_number', parsedVersionNumber).maybeSingle()
+    : await versionQuery.eq('id', requestedVersion).maybeSingle();
+
+  return {
+    version: (result.data || null) as DeploymentVersionRecord | null,
+    error: result.error,
+  };
 }
 
 export async function GET(request: NextRequest) {
@@ -70,7 +116,24 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const storagePath = resolveStoragePath(deployment, code);
+    const { version: selectedVersion, error: versionError } = await fetchRequestedVersion(
+      deployment.id,
+      request.nextUrl.searchParams.get('version'),
+    );
+
+    if (versionError || (request.nextUrl.searchParams.get('version') && !selectedVersion)) {
+      return jsonError({
+        status: 404,
+        code: 'DEPLOYMENT_VERSION_NOT_FOUND',
+        message: '未找到指定版本。',
+        detail: versionError?.message,
+        requestId,
+      });
+    }
+
+    const storagePath = selectedVersion
+      ? getStoragePathFromFilePath(selectedVersion.file_path, code)
+      : resolveStoragePath(deployment, code);
     const { error: readError, content } = await readHtmlContent(storagePath);
     if (readError || content == null) {
       return jsonError({
@@ -84,7 +147,7 @@ export async function GET(request: NextRequest) {
 
     const shouldDownload = request.nextUrl.searchParams.get('download') === '1';
     if (shouldDownload) {
-      const downloadFilename = deployment.filename || `${code}.html`;
+      const downloadFilename = selectedVersion?.filename || deployment.filename || `${code}.html`;
       return new NextResponse(content, {
         headers: {
           'Content-Type': 'text/html; charset=utf-8',
@@ -101,16 +164,19 @@ export async function GET(request: NextRequest) {
         id: deployment.id,
         code: deployment.code,
         status: deployment.status,
-        title: deployment.title,
-        description: deployment.description,
-        filename: deployment.filename,
+        title: selectedVersion?.title || deployment.title,
+        description: selectedVersion ? selectedVersion.description : deployment.description,
+        filename: selectedVersion?.filename || deployment.filename,
         url: `${request.nextUrl.protocol}//${request.nextUrl.host}/s/${deployment.code}`,
-        filePath: deployment.file_path,
-        fileSize: deployment.file_size,
+        filePath: selectedVersion?.file_path || deployment.file_path,
+        fileSize: selectedVersion?.file_size ?? deployment.file_size,
+        currentVersionId: deployment.current_version_id ?? null,
+        versionId: selectedVersion?.id ?? deployment.current_version_id ?? null,
+        versionNumber: selectedVersion?.version_number ?? null,
         likeCount: deployment.like_count ?? 0,
         locked: Number(deployment.like_count ?? 0) > 0,
         content,
-        createdAt: deployment.created_at,
+        createdAt: selectedVersion?.created_at || deployment.created_at,
         updatedAt: deployment.updated_at,
       },
       withNoStoreHeaders()
@@ -205,64 +271,35 @@ export async function PATCH(request: NextRequest) {
       });
     }
 
-    if (Number(deployment.like_count ?? 0) > 0) {
-      return jsonError({
-        status: 423,
-        code: 'DEPLOYMENT_LOCKED_BY_LIKE',
-        message: '该项目已被手动点赞，内容已锁定，不能再修改。',
-        detail: `当前点赞数: ${deployment.like_count}`,
-        requestId,
-      });
-    }
-
-    const storagePath = createVersionedHtmlPath(code);
+    const versionNumber = await getNextVersionNumber(deployment.id);
+    const storagePath = createVersionedHtmlPath(code, versionNumber);
     const bucket = supabase.storage.from('deployments');
-    const { error: updateFileError } = await bucket.update(storagePath, normalizedContent, {
+    const { error: uploadFileError } = await bucket.upload(storagePath, normalizedContent, {
       contentType: 'text/html',
       upsert: true,
     });
 
-    if (updateFileError) {
-      const { error: uploadFallbackError } = await bucket.upload(storagePath, normalizedContent, {
-        contentType: 'text/html',
-        upsert: true,
+    if (uploadFileError) {
+      return jsonError({
+        status: 500,
+        code: 'HTML_VERSION_UPLOAD_FAILED',
+        message: 'HTML 新版本上传失败。',
+        detail: uploadFileError.message,
+        requestId,
       });
-
-      if (uploadFallbackError) {
-        return jsonError({
-          status: 500,
-          code: 'HTML_UPDATE_FAILED',
-          message: 'HTML 内容更新失败。',
-          detail: `${updateFileError.message}; fallback: ${uploadFallbackError.message}`,
-          requestId,
-        });
-      }
     }
-
-    const updates: {
-      file_size: number;
-      updated_at: string;
-      title?: string;
-      description?: string | null;
-      filename?: string;
-      file_path?: string;
-    } = {
-      file_size: fileSize,
-      updated_at: new Date().toISOString(),
-    };
 
     const {
       data: { publicUrl },
-    } = supabase.storage.from('deployments').getPublicUrl(storagePath);
-    updates.file_path = publicUrl;
+    } = bucket.getPublicUrl(storagePath);
 
-    if (typeof body.title === 'string' && body.title.trim()) {
-      updates.title = body.title.trim();
-    }
-
-    if (typeof body.description === 'string') {
-      updates.description = normalizeDescription(body.description);
-    }
+    const nextTitle = typeof body.title === 'string' && body.title.trim()
+      ? body.title.trim()
+      : deployment.title;
+    const nextDescription = typeof body.description === 'string'
+      ? normalizeDescription(body.description)
+      : deployment.description;
+    let nextFilename = deployment.filename;
 
     if (typeof body.filename === 'string' && body.filename.trim()) {
       const normalizedFilename = body.filename.trim();
@@ -274,12 +311,45 @@ export async function PATCH(request: NextRequest) {
           requestId,
         });
       }
-      updates.filename = normalizedFilename;
+      nextFilename = normalizedFilename;
     }
 
+    const { data: version, error: versionError } = await supabase
+      .from('deployment_versions')
+      .insert({
+        deployment_id: deployment.id,
+        version_number: versionNumber,
+        title: nextTitle,
+        description: nextDescription,
+        filename: nextFilename,
+        file_path: publicUrl,
+        file_size: fileSize,
+      })
+      .select()
+      .single();
+
+    if (versionError || !version) {
+      return jsonError({
+        status: 500,
+        code: 'DEPLOYMENT_VERSION_INSERT_FAILED',
+        message: 'HTML 版本记录写入失败。',
+        detail: versionError?.message,
+        requestId,
+      });
+    }
+
+    const updatedAt = new Date().toISOString();
     const { error: updateError } = await supabase
       .from('deployments')
-      .update(updates)
+      .update({
+        current_version_id: version.id,
+        title: nextTitle,
+        description: nextDescription,
+        filename: nextFilename,
+        file_path: publicUrl,
+        file_size: fileSize,
+        updated_at: updatedAt,
+      })
       .eq('id', deployment.id);
 
     if (updateError) {
@@ -298,10 +368,13 @@ export async function PATCH(request: NextRequest) {
         requestId,
         id: deployment.id,
         code,
-        updatedAt: updates.updated_at,
+        versionId: version.id,
+        versionNumber,
+        updatedAt,
         fileSize,
-        message: 'HTML 内容已更新。',
+        message: 'HTML 新版本已创建。',
         url: `${request.nextUrl.protocol}//${request.nextUrl.host}/s/${code}`,
+        versionUrl: `${request.nextUrl.protocol}//${request.nextUrl.host}/s/${code}/v/${versionNumber}`,
       },
       withNoStoreHeaders()
     );

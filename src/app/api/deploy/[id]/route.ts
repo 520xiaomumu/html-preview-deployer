@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { DeploymentRow, supabase } from '@/lib/db';
-import { mapDeploymentRow } from '@/lib/deployment-mapper';
-import { listHtmlPathsByCode } from '@/lib/storage';
+import { DeploymentRow, DeploymentVersionRow, supabase } from '@/lib/db';
+import { mapDeploymentRow, mapDeploymentVersionRow } from '@/lib/deployment-mapper';
+import { getStoragePathFromFilePath, listHtmlPathsByCode } from '@/lib/storage';
 import { getErrorMessage, isMissingLikeCountError } from '@/lib/error';
 import { jsonError } from '@/lib/api-response';
 
@@ -55,8 +55,16 @@ export async function GET(
     }
 
     const formattedDeployment = mapDeploymentRow(deployment as DeploymentRow);
+    const { data: versions, error: versionsError } = await supabase
+      .from('deployment_versions')
+      .select('*')
+      .eq('deployment_id', deployment.id)
+      .order('version_number', { ascending: false });
 
-    return NextResponse.json(formattedDeployment);
+    return NextResponse.json({
+      ...formattedDeployment,
+      versions: versionsError ? [] : ((versions || []) as DeploymentVersionRow[]).map(mapDeploymentVersionRow),
+    });
   } catch (error: unknown) {
     return NextResponse.json(
       { error: getErrorMessage(error) },
@@ -137,14 +145,14 @@ export async function DELETE(
     // Get deployment info first to find files
     let { data: deployment, error: fetchError } = await supabase
       .from('deployments')
-      .select('code, like_count')
+      .select('id, code, like_count')
       .eq('id', id)
       .maybeSingle();
 
     if (isMissingLikeCountError(fetchError)) {
       const fallback = await supabase
         .from('deployments')
-        .select('code')
+        .select('id, code')
         .eq('id', id)
         .maybeSingle();
 
@@ -174,8 +182,18 @@ export async function DELETE(
 
     const bucket = supabase.storage.from('deployments');
     let htmlPaths: string[] = [];
+    const { data: versions } = await supabase
+      .from('deployment_versions')
+      .select('file_path')
+      .eq('deployment_id', deployment.id);
+
+    htmlPaths = (versions || [])
+      .map((version) => getStoragePathFromFilePath(version.file_path, code))
+      .filter((path, index, paths) => path && paths.indexOf(path) === index);
+
     try {
-      htmlPaths = await listHtmlPathsByCode(bucket, code);
+      const discoveredPaths = await listHtmlPathsByCode(bucket, code);
+      htmlPaths = Array.from(new Set([...htmlPaths, ...discoveredPaths]));
     } catch (listError) {
       console.error('Error listing html files from storage:', listError);
     }

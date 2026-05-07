@@ -4,7 +4,7 @@ import { mapDeploymentRow } from '@/lib/deployment-mapper';
 import { getErrorMessage, isMissingLikeCountError } from '@/lib/error';
 import { jsonError } from '@/lib/api-response';
 
-const DEPLOYMENT_COLUMNS = 'id, code, title, description, filename, file_path, file_size, qr_code_path, created_at, updated_at, view_count, status';
+const DEPLOYMENT_COLUMNS = 'id, code, current_version_id, title, description, filename, file_path, file_size, qr_code_path, created_at, updated_at, view_count, status';
 const DEPLOYMENT_COLUMNS_WITH_LIKES = `${DEPLOYMENT_COLUMNS}, like_count`;
 
 function parseSort(sortBy: string | null, includeLikeCount = true) {

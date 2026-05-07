@@ -21,8 +21,8 @@ export function getStoragePathFromFilePath(filePath: unknown, fallbackCode: stri
   }
 }
 
-export function createVersionedHtmlPath(code: string, now = Date.now()) {
-  return `html/${code}-${now}.html`;
+export function createVersionedHtmlPath(code: string, versionNumber: number, now = Date.now()) {
+  return `html/${code}/v${versionNumber}-${now}.html`;
 }
 
 type StorageItem = {

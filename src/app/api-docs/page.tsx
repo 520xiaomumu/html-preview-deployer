@@ -13,12 +13,13 @@ export default function ApiDocsPage() {
         back: '返回首页',
         intro: '接口说明',
         deployEntry: '部署入口：POST /api/deploy',
-        contentCollab: '内容协作：GET /api/deploy/content、PATCH /api/deploy/content',
+        contentCollab: '内容协作：GET /api/deploy/content、PATCH /api/deploy/content、GET /api/deploys/:code/versions、PATCH /api/deploys/:code/current',
         requestExample: '请求示例',
         customDeploy: '自定义短链部署示例（默认关闭）',
         readHtml: '读取 HTML 内容',
         downloadHtml: '下载 HTML 文件',
-        updateHtml: '更新 HTML 内容',
+        updateHtml: '追加 HTML 版本',
+        versionApis: '版本历史与切换',
         successResp: '成功响应示例',
         cooldownResp: '冷却响应示例',
         commonError: '常见错误调用（不要这样用）',
@@ -28,12 +29,13 @@ export default function ApiDocsPage() {
         back: 'Back to Home',
         intro: 'API Overview',
         deployEntry: 'Deploy endpoint: POST /api/deploy',
-        contentCollab: 'Content ops: GET /api/deploy/content, PATCH /api/deploy/content',
+        contentCollab: 'Content ops: GET /api/deploy/content, PATCH /api/deploy/content, GET /api/deploys/:code/versions, PATCH /api/deploys/:code/current',
         requestExample: 'Request Example',
         customDeploy: 'Custom short-code deploy example (disabled by default)',
         readHtml: 'Read HTML content',
         downloadHtml: 'Download HTML file',
-        updateHtml: 'Update HTML content',
+        updateHtml: 'Append HTML version',
+        versionApis: 'Version history and switching',
         successResp: 'Success Response Example',
         cooldownResp: 'Cooldown Response Example',
         commonError: 'Common wrong call (avoid this)',
@@ -59,8 +61,21 @@ export default function ApiDocsPage() {
     "customCode": "my-site-01"
   }'`;
 
-  const sampleReadRequest = `curl "https://www.htmlcode.fun/api/deploy/content?code=my-site-01"`;
-  const sampleDownloadRequest = `curl -L "https://www.htmlcode.fun/api/deploy/content?code=my-site-01&download=1" -o page.html`;
+  const sampleCreateVersionRequest = `curl -X POST https://www.htmlcode.fun/api/deploy \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "filename": "landing-v2.html",
+    "title": "my-landing",
+    "description": "Second iteration under the same short link.",
+    "content": "<!doctype html><html><body><h1>Landing v2</h1></body></html>",
+    "enableCustomCode": true,
+    "customCode": "my-site-01",
+    "createVersion": true
+  }'`;
+
+  const sampleReadRequest = `curl "https://www.htmlcode.fun/api/deploy/content?code=my-site-01"
+curl "https://www.htmlcode.fun/api/deploy/content?code=my-site-01&version=2"`;
+  const sampleDownloadRequest = `curl -L "https://www.htmlcode.fun/api/deploy/content?code=my-site-01&version=2&download=1" -o page.html`;
   const sampleUpdateRequest = `curl -X PATCH https://www.htmlcode.fun/api/deploy/content \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -70,6 +85,14 @@ export default function ApiDocsPage() {
     "description": "Updated copy and layout for the landing page.",
     "filename": "landing-v2.html"
   }'`;
+
+  const sampleVersionRequest = `curl "https://www.htmlcode.fun/api/deploys/my-site-01/versions"
+
+curl -X PATCH https://www.htmlcode.fun/api/deploys/my-site-01/current \\
+  -H "Content-Type: application/json" \\
+  -d '{ "versionNumber": 2 }'
+
+curl "https://www.htmlcode.fun/s/my-site-01/v/2"`;
 
   const sampleSuccess = `{
   "success": true,
@@ -131,6 +154,7 @@ export default function ApiDocsPage() {
       <div className="rounded-lg border border-gray-200 bg-white p-5 space-y-3">
         <h2 className="text-lg font-semibold text-gray-900">{text.customDeploy}</h2>
         <pre className="overflow-auto rounded-md bg-gray-900 p-4 text-xs text-gray-100">{sampleCustomCodeRequest}</pre>
+        <pre className="overflow-auto rounded-md bg-gray-900 p-4 text-xs text-gray-100">{sampleCreateVersionRequest}</pre>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -146,6 +170,11 @@ export default function ApiDocsPage() {
           <h2 className="text-lg font-semibold text-gray-900">{text.updateHtml}</h2>
           <pre className="overflow-auto rounded-md bg-gray-900 p-4 text-xs text-gray-100">{sampleUpdateRequest}</pre>
         </div>
+      </div>
+
+      <div className="rounded-lg border border-gray-200 bg-white p-5 space-y-3">
+        <h2 className="text-lg font-semibold text-gray-900">{text.versionApis}</h2>
+        <pre className="overflow-auto rounded-md bg-gray-900 p-4 text-xs text-gray-100">{sampleVersionRequest}</pre>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">

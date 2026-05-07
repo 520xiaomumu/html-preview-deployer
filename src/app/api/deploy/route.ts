@@ -5,6 +5,7 @@ import { randomBytes, randomUUID } from 'crypto';
 import { MAX_HTML_SIZE_BYTES, SHORT_CODE_PATTERN, isValidHtmlContent, normalizeDescription } from '@/lib/deploy-config';
 import { getErrorMessage } from '@/lib/error';
 import { jsonError } from '@/lib/api-response';
+import { createVersionedHtmlPath } from '@/lib/storage';
 
 const COOLDOWN_SECONDS = 10;
 
@@ -62,6 +63,30 @@ async function isCodeTaken(code: string) {
   }
 
   return !!data;
+}
+
+async function fetchDeploymentByCode(code: string) {
+  return supabase
+    .from('deployments')
+    .select('*')
+    .eq('code', code)
+    .maybeSingle();
+}
+
+async function getNextVersionNumber(deploymentId: string) {
+  const { data, error } = await supabase
+    .from('deployment_versions')
+    .select('version_number')
+    .eq('deployment_id', deploymentId)
+    .order('version_number', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return Number(data?.version_number ?? 0) + 1;
 }
 
 async function generateUniqueCode() {
@@ -135,13 +160,14 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const { content, filename, title, description, enableCustomCode, customCode } = body as {
+    const { content, filename, title, description, enableCustomCode, customCode, createVersion } = body as {
       content?: unknown;
       filename?: unknown;
       title?: unknown;
       description?: unknown;
       enableCustomCode?: unknown;
       customCode?: unknown;
+      createVersion?: unknown;
     };
 
     if (typeof content !== 'string' || typeof filename !== 'string') {
@@ -206,7 +232,9 @@ export async function POST(request: NextRequest) {
     }
 
     const customCodeEnabled = enableCustomCode === true;
+    const shouldCreateVersion = createVersion === true;
     let resolvedCode: string;
+    let existingDeployment: Record<string, unknown> | null = null;
 
     if (customCodeEnabled) {
       if (typeof customCode !== 'string' || !customCode.trim()) {
@@ -236,18 +264,26 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        const exists = await isCodeTaken(normalizedCustomCode);
-        if (exists) {
+        const { data: foundDeployment, error: findError } = await fetchDeploymentByCode(normalizedCustomCode);
+        if (findError) {
+          throw new Error(findError.message);
+        }
+
+        if (foundDeployment && !shouldCreateVersion) {
           return failResponse({
             status: 409,
             code: 'CUSTOM_CODE_TAKEN',
             message: '该自定义短链后缀已被占用。',
             detail: `customCode=${normalizedCustomCode}`,
-            hint: '请更换一个未占用的 customCode。',
+            hint: '请更换一个未占用的 customCode，或传 createVersion: true 在该短链下创建新版本。',
             docs: '/api-docs',
             stage: 'code_generation',
             requestId,
           });
+        }
+
+        if (foundDeployment) {
+          existingDeployment = foundDeployment;
         }
       } catch (queryError: unknown) {
         return failResponse({
@@ -342,8 +378,12 @@ export async function POST(request: NextRequest) {
 
     const deployUrl = `${protocol}://${host}/s/${code}`;
 
+    const versionNumber = existingDeployment
+      ? await getNextVersionNumber(String(existingDeployment.id))
+      : 1;
+
     // 1. Upload HTML to Supabase Storage
-    const htmlPath = `html/${code}.html`;
+    const htmlPath = createVersionedHtmlPath(code, versionNumber);
     const { error: uploadHtmlError } = await supabase.storage
       .from('deployments')
       .upload(htmlPath, normalizedContent, {
@@ -362,56 +402,166 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 2. Generate and Upload QR Code
-    const qrBuffer = await QRCode.toBuffer(deployUrl);
     const qrPath = `qrcodes/${code}.png`;
-    const { error: uploadQrError } = await supabase.storage
-      .from('deployments')
-      .upload(qrPath, qrBuffer, {
-        contentType: 'image/png',
-        upsert: true
-      });
+    let qrPublicUrl = typeof existingDeployment?.qr_code_path === 'string'
+      ? existingDeployment.qr_code_path
+      : '';
 
-    if (uploadQrError) {
-      return failResponse({
-        status: 500,
-        code: 'DEPLOY_UPLOAD_QR_FAILED',
-        message: '二维码生成或上传失败。',
-        detail: uploadQrError.message,
-        stage: 'upload_qr',
-        requestId,
-      });
+    if (!existingDeployment) {
+      // 2. Generate and Upload QR Code
+      const qrBuffer = await QRCode.toBuffer(deployUrl);
+      const { error: uploadQrError } = await supabase.storage
+        .from('deployments')
+        .upload(qrPath, qrBuffer, {
+          contentType: 'image/png',
+          upsert: true
+        });
+
+      if (uploadQrError) {
+        return failResponse({
+          status: 500,
+          code: 'DEPLOY_UPLOAD_QR_FAILED',
+          message: '二维码生成或上传失败。',
+          detail: uploadQrError.message,
+          stage: 'upload_qr',
+          requestId,
+        });
+      }
+
+      const { data: { publicUrl } } = supabase.storage.from('deployments').getPublicUrl(qrPath);
+      qrPublicUrl = publicUrl;
     }
 
     // Get Public URLs
     const { data: { publicUrl: htmlPublicUrl } } = supabase.storage.from('deployments').getPublicUrl(htmlPath);
-    const { data: { publicUrl: qrPublicUrl } } = supabase.storage.from('deployments').getPublicUrl(qrPath);
+    const versionTitle = typeof title === 'string' && title.trim() ? title.trim() : normalizedFilename;
+    const versionDescription = normalizeDescription(description);
 
-    // 3. Save to Supabase DB
-    const { data, error: dbError } = await supabase
-      .from('deployments')
-      .insert({
+    let deploymentId: string;
+    let versionId: string | null = null;
+
+    if (existingDeployment) {
+      deploymentId = String(existingDeployment.id);
+      const { data: version, error: versionError } = await supabase
+        .from('deployment_versions')
+        .insert({
+          deployment_id: deploymentId,
+          version_number: versionNumber,
+          title: versionTitle,
+          description: versionDescription,
+          filename: normalizedFilename,
+          file_path: htmlPublicUrl,
+          file_size: fileSize,
+        })
+        .select()
+        .single();
+
+      if (versionError || !version) {
+        return failResponse({
+          status: 500,
+          code: 'DEPLOY_VERSION_INSERT_FAILED',
+          message: '新版本记录写入失败。',
+          detail: versionError?.message,
+          stage: 'database',
+          requestId,
+        });
+      }
+
+      versionId = version.id;
+      const { error: updateError } = await supabase
+        .from('deployments')
+        .update({
+          current_version_id: version.id,
+          title: versionTitle,
+          description: versionDescription,
+          filename: normalizedFilename,
+          file_path: htmlPublicUrl,
+          file_size: fileSize,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', deploymentId);
+
+      if (updateError) {
+        return failResponse({
+          status: 500,
+          code: 'DEPLOY_CURRENT_VERSION_UPDATE_FAILED',
+          message: '当前版本指针更新失败。',
+          detail: updateError.message,
+          stage: 'database',
+          requestId,
+        });
+      }
+    } else {
+      // 3. Save to Supabase DB
+      const { data, error: dbError } = await supabase
+        .from('deployments')
+        .insert({
         code,
-        title: typeof title === 'string' && title.trim() ? title.trim() : normalizedFilename,
-        description: normalizeDescription(description),
+        title: versionTitle,
+        description: versionDescription,
         filename: normalizedFilename,
         file_path: htmlPublicUrl, // Storing the public URL for easy access
         file_size: fileSize,
         qr_code_path: qrPublicUrl,
         status: 'active'
-      })
-      .select()
-      .single();
+        })
+        .select()
+        .single();
 
-    if (dbError) {
-      return failResponse({
-        status: 500,
-        code: 'DEPLOY_DB_INSERT_FAILED',
-        message: '部署记录写入失败。',
-        detail: dbError.message,
-        stage: 'database',
-        requestId,
-      });
+      if (dbError || !data) {
+        return failResponse({
+          status: 500,
+          code: 'DEPLOY_DB_INSERT_FAILED',
+          message: '部署记录写入失败。',
+          detail: dbError?.message,
+          stage: 'database',
+          requestId,
+        });
+      }
+
+      deploymentId = data.id;
+      const { data: version, error: versionError } = await supabase
+        .from('deployment_versions')
+        .insert({
+          deployment_id: deploymentId,
+          version_number: versionNumber,
+          title: versionTitle,
+          description: versionDescription,
+          filename: normalizedFilename,
+          file_path: htmlPublicUrl,
+          file_size: fileSize,
+          created_at: data.created_at,
+        })
+        .select()
+        .single();
+
+      if (versionError || !version) {
+        return failResponse({
+          status: 500,
+          code: 'DEPLOY_VERSION_INSERT_FAILED',
+          message: '初始版本记录写入失败。',
+          detail: versionError?.message,
+          stage: 'database',
+          requestId,
+        });
+      }
+
+      versionId = version.id;
+      const { error: currentVersionError } = await supabase
+        .from('deployments')
+        .update({ current_version_id: version.id })
+        .eq('id', deploymentId);
+
+      if (currentVersionError) {
+        return failResponse({
+          status: 500,
+          code: 'DEPLOY_CURRENT_VERSION_UPDATE_FAILED',
+          message: '当前版本指针写入失败。',
+          detail: currentVersionError.message,
+          stage: 'database',
+          requestId,
+        });
+      }
     }
 
     const nowIso = new Date().toISOString();
@@ -433,11 +583,14 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      id: data.id,
-      code: data.code,
+      id: deploymentId,
+      code,
       url: deployUrl,
       qrCode: qrPublicUrl,
-      description: data.description,
+      description: versionDescription,
+      versionId,
+      versionNumber,
+      createdVersion: Boolean(existingDeployment),
       requestId,
       cooldownSeconds: COOLDOWN_SECONDS,
       nextAvailableAt: new Date(Date.now() + COOLDOWN_SECONDS * 1000).toISOString(),
