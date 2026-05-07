@@ -6,6 +6,8 @@ import {
   NO_STORE_CACHE_CONTROL,
 } from '@/lib/deploy-config';
 import { getStoragePathFromFilePath } from '@/lib/storage';
+import { DeploymentVersionRow } from '@/lib/db';
+import { selectPrimaryVersion } from '@/lib/version-selection';
 
 export async function GET(
   request: NextRequest,
@@ -18,7 +20,7 @@ export async function GET(
     // For preview mode (admin embed), allow inactive deployments too
     const query = supabase
       .from('deployments')
-      .select('id, file_path, status')
+      .select('id, file_path, status, current_version_id')
       .eq('code', code);
     
     if (!isPreview) {
@@ -43,7 +45,18 @@ export async function GET(
         });
     }
 
-    const storagePath = getStoragePathFromFilePath(deployment.file_path, code);
+    const { data: versions, error: versionsError } = await supabase
+      .from('deployment_versions')
+      .select('id, version_number, file_path, like_count')
+      .eq('deployment_id', deployment.id)
+      .order('version_number', { ascending: false });
+
+    if (versionsError) {
+      console.error('Fetch versions error:', versionsError);
+    }
+
+    const primaryVersion = selectPrimaryVersion((versions || []) as DeploymentVersionRow[], deployment.current_version_id);
+    const storagePath = getStoragePathFromFilePath(primaryVersion?.file_path || deployment.file_path, code);
     const { data: fileData, error: downloadError } = await supabase.storage
       .from('deployments')
       .download(storagePath);

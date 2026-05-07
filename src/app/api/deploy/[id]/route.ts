@@ -4,6 +4,7 @@ import { mapDeploymentRow, mapDeploymentVersionRow } from '@/lib/deployment-mapp
 import { getStoragePathFromFilePath, listHtmlPathsByCode } from '@/lib/storage';
 import { getErrorMessage, isMissingLikeCountError } from '@/lib/error';
 import { jsonError } from '@/lib/api-response';
+import { selectPrimaryVersion } from '@/lib/version-selection';
 
 async function fetchDeploymentLockState(id: string) {
   const { data, error } = await supabase
@@ -61,9 +62,13 @@ export async function GET(
       .eq('deployment_id', deployment.id)
       .order('version_number', { ascending: false });
 
+    const mappedVersions = versionsError ? [] : ((versions || []) as DeploymentVersionRow[]).map(mapDeploymentVersionRow);
+    const primaryVersion = selectPrimaryVersion((versions || []) as DeploymentVersionRow[], formattedDeployment.currentVersionId);
+
     return NextResponse.json({
       ...formattedDeployment,
-      versions: versionsError ? [] : ((versions || []) as DeploymentVersionRow[]).map(mapDeploymentVersionRow),
+      primaryVersionId: primaryVersion?.id ?? formattedDeployment.currentVersionId,
+      versions: mappedVersions,
     });
   } catch (error: unknown) {
     return NextResponse.json(

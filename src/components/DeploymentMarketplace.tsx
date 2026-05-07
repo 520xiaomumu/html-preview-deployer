@@ -472,6 +472,23 @@ export default function DeploymentMarketplace({
     window.localStorage.setItem('htmlcode-liked-deployments', JSON.stringify(Array.from(nextLikedIds)));
   };
 
+  const persistLikedVersionFromResponse = (versionId: unknown, alreadyLiked: boolean) => {
+    if (typeof versionId !== 'string') return;
+    try {
+      const stored = window.localStorage.getItem('htmlcode-liked-deployment-versions');
+      const parsed = stored ? JSON.parse(stored) : [];
+      const versionIds = new Set(Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : []);
+      if (alreadyLiked) {
+        versionIds.delete(versionId);
+      } else {
+        versionIds.add(versionId);
+      }
+      window.localStorage.setItem('htmlcode-liked-deployment-versions', JSON.stringify(Array.from(versionIds)));
+    } catch {
+      window.localStorage.setItem('htmlcode-liked-deployment-versions', JSON.stringify(alreadyLiked ? [] : [versionId]));
+    }
+  };
+
   const handleLike = useCallback(
     async (deploy: Deployment) => {
       if (deploy.status !== 'active') return;
@@ -508,6 +525,7 @@ export default function DeploymentMarketplace({
           nextLikedIds.add(deploy.id);
         }
         persistLikedIds(nextLikedIds);
+        persistLikedVersionFromResponse(data.versionId, alreadyLiked);
         showToast(alreadyLiked ? text.unlikeSuccess : text.likeSuccess, 'success');
       } catch (error) {
         console.error('Like error', error);

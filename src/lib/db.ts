@@ -30,6 +30,7 @@ export interface Deployment {
   filePath: string;
   fileSize: number | null;
   qrCodePath: string;
+  primaryVersionId: string | null;
   createdAt: string;
   updatedAt: string;
   viewCount: number;
@@ -47,6 +48,7 @@ export interface DeploymentVersion {
   filePath: string;
   fileSize: number | null;
   createdAt: string;
+  likeCount: number;
 }
 
 // Interface for Database Row (snake_case, matches Supabase)
@@ -60,6 +62,7 @@ export interface DeploymentRow {
   file_path: string;
   file_size: number | null;
   qr_code_path: string;
+  primary_version_id?: string | null;
   created_at: string;
   updated_at: string;
   view_count: number;
@@ -77,4 +80,5 @@ export interface DeploymentVersionRow {
   file_path: string;
   file_size: number | null;
   created_at: string;
+  like_count: number | null;
 }

@@ -11,6 +11,7 @@ export function mapDeploymentRow(row: DeploymentRow): Deployment {
     filePath: row.file_path,
     fileSize: row.file_size,
     qrCodePath: row.qr_code_path,
+    primaryVersionId: row.primary_version_id ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     viewCount: row.view_count,
@@ -30,5 +31,6 @@ export function mapDeploymentVersionRow(row: DeploymentVersionRow): DeploymentVe
     filePath: row.file_path,
     fileSize: row.file_size,
     createdAt: row.created_at,
+    likeCount: row.like_count ?? 0,
   };
 }

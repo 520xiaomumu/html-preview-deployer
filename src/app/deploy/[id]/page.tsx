@@ -77,14 +77,25 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
             versions: (count: number) => `${count} 个版本`,
             views: (count: number) => `${count} 次访问`,
             likes: (count: number) => `${count} 个赞`,
+            versionLikes: (count: number) => `${count} 赞`,
             active: '运行中',
             inactive: '已下架',
+            primaryVersionRule: '主域名由最高赞版本决定',
+            primaryVersion: '主版本',
             qrcodeAlt: '部署二维码',
             downloadQrcode: '下载二维码',
             previewTitle: (version: number | string) => `v${version} 预览`,
             unpublishDeploy: '下架部署',
             deleteForever: '彻底删除',
             lockedByLike: '该项目已被点赞锁定，不能下架、上架或删除。',
+            likePrimary: '点赞主域名当前版本',
+            unlikePrimary: '取消主版本点赞',
+            likeVersion: '点赞该版本',
+            unlikeVersion: '取消该版本点赞',
+            likeDone: '已点赞版本，主域名会自动指向最高赞版本',
+            unlikeDone: '已取消点赞',
+            likeFailed: '点赞失败',
+            unlikeFailed: '取消点赞失败',
             inactiveTipTitle: '该部署已下架',
             inactiveTipDesc: '链接已失效，如需恢复请点击重新上架',
             republish: '重新上架',
@@ -138,14 +149,25 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
             versions: (count: number) => `${count} versions`,
             views: (count: number) => `${count} views`,
             likes: (count: number) => `${count} likes`,
+            versionLikes: (count: number) => `${count} likes`,
             active: 'Active',
             inactive: 'Offline',
+            primaryVersionRule: 'The main URL follows the most-liked version',
+            primaryVersion: 'Main version',
             qrcodeAlt: 'Deployment QR code',
             downloadQrcode: 'Download QR Code',
             previewTitle: (version: number | string) => `v${version} Preview`,
             unpublishDeploy: 'Unpublish Deployment',
             deleteForever: 'Delete Permanently',
             lockedByLike: 'This project has likes and is locked from status changes or deletion.',
+            likePrimary: 'Like the current main version',
+            unlikePrimary: 'Remove main-version like',
+            likeVersion: 'Like this version',
+            unlikeVersion: 'Remove this version like',
+            likeDone: 'Version liked. The main URL follows the most-liked version.',
+            unlikeDone: 'Like removed',
+            likeFailed: 'Failed to like',
+            unlikeFailed: 'Failed to remove like',
             inactiveTipTitle: 'This deployment is offline',
             inactiveTipDesc: 'The link is unavailable. Republish to restore access.',
             republish: 'Republish',
@@ -183,6 +205,7 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [qrCodeUrls, setQrCodeUrls] = useState<Record<string, string>>({});
+  const [likedVersionIds, setLikedVersionIds] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<{
     open: boolean;
     message: string;
@@ -256,23 +279,48 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
     if (!deploy) return null;
     return versions.find((version) => version.id === deploy.currentVersionId) || versions[0] || null;
   }, [deploy, versions]);
-  const selectedVersion = useMemo(() => {
+  const primaryVersion = useMemo(() => {
     if (!deploy) return null;
-    return versions.find((version) => version.id === selectedVersionId)
+    return versions.find((version) => version.id === deploy.primaryVersionId)
+      || versions
+        .filter((version) => version.likeCount > 0)
+        .sort((a, b) => b.likeCount - a.likeCount || b.versionNumber - a.versionNumber)[0]
       || currentVersion
       || versions[0]
       || null;
-  }, [currentVersion, deploy, selectedVersionId, versions]);
+  }, [currentVersion, deploy, versions]);
+  const selectedVersion = useMemo(() => {
+    if (!deploy) return null;
+    return versions.find((version) => version.id === selectedVersionId)
+      || primaryVersion
+      || currentVersion
+      || versions[0]
+      || null;
+  }, [currentVersion, deploy, primaryVersion, selectedVersionId, versions]);
 
   useEffect(() => {
-    if (!currentVersion) return;
+    if (!primaryVersion) return;
     setSelectedVersionId((previous) => {
       if (previous && versions.some((version) => version.id === previous)) {
         return previous;
       }
-      return currentVersion.id;
+      return primaryVersion.id;
     });
-  }, [currentVersion, versions]);
+  }, [primaryVersion, versions]);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem('htmlcode-liked-deployment-versions');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          setLikedVersionIds(new Set(parsed.filter((item): item is string => typeof item === 'string')));
+        }
+      }
+    } catch {
+      setLikedVersionIds(new Set());
+    }
+  }, []);
 
   const closeDialog = () => {
     setDialogState((prev) => ({ ...prev, isOpen: false }));
@@ -469,6 +517,42 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
     }
   };
 
+  const persistLikedVersionIds = (nextLikedIds: Set<string>) => {
+    setLikedVersionIds(nextLikedIds);
+    window.localStorage.setItem('htmlcode-liked-deployment-versions', JSON.stringify(Array.from(nextLikedIds)));
+  };
+
+  const handleLikeVersion = async (version: DeploymentVersion, useDeploymentEndpoint = false) => {
+    if (!deploy || deploy.status !== 'active') return;
+    const alreadyLiked = likedVersionIds.has(version.id);
+    try {
+      const res = await fetch(
+        useDeploymentEndpoint
+          ? `/api/deploy/${deploy.id}/like`
+          : `/api/deploys/${deploy.code}/versions/${version.versionNumber}/like`,
+        { method: alreadyLiked ? 'DELETE' : 'POST' },
+      );
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || (alreadyLiked ? text.unlikeFailed : text.likeFailed));
+      }
+
+      const resolvedVersionId = typeof data.versionId === 'string' ? data.versionId : version.id;
+      const nextLikedIds = new Set(likedVersionIds);
+      if (alreadyLiked) {
+        nextLikedIds.delete(resolvedVersionId);
+      } else {
+        nextLikedIds.add(resolvedVersionId);
+      }
+      persistLikedVersionIds(nextLikedIds);
+      showToast(alreadyLiked ? text.unlikeDone : text.likeDone, 'success');
+      await fetchDeploy(id);
+    } catch (error) {
+      console.error('Like version error', error);
+      showToast(alreadyLiked ? text.unlikeFailed : text.likeFailed, 'error');
+    }
+  };
+
   const handleCopySource = async (version: DeploymentVersion) => {
     try {
       const html = await fetchVersionHtml(version);
@@ -605,6 +689,7 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
   const selectedVersionNumber = selectedVersion?.versionNumber || currentVersionNumber;
   const selectedPreviewUrl = selectedVersion ? getPreviewUrl(selectedVersion) : `${fullUrl}?preview=1`;
   const canUseLivePreview = deploy.status === 'active';
+  const primaryVersionNumber = primaryVersion?.versionNumber || currentVersionNumber;
 
   return (
     <div className="space-y-6 pb-8">
@@ -703,6 +788,11 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
             <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">
               {text.currentVersion(currentVersionNumber)}
             </span>
+            {primaryVersion && (
+              <span className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700">
+                {text.primaryVersion} v{primaryVersionNumber}
+              </span>
+            )}
             <span
               className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${
                 deploy.status === 'active'
@@ -713,6 +803,7 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
               {deploy.status === 'active' ? text.active : text.inactive}
             </span>
           </div>
+          <p className="mt-2 text-xs text-slate-400">{text.primaryVersionRule}</p>
           <p className="mt-2 max-w-3xl text-sm text-slate-500">{deploy.description || text.descriptionFallback}</p>
           <div className="mt-3 flex flex-wrap gap-4 text-sm text-slate-500">
             <span className="inline-flex items-center">
@@ -727,6 +818,19 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
               <Heart className="mr-1.5 h-4 w-4" />
               {text.likes(deploy.likeCount)}
             </span>
+            {primaryVersion && (
+              <button
+                type="button"
+                onClick={() => handleLikeVersion(primaryVersion, true)}
+                className={`inline-flex items-center transition ${
+                  likedVersionIds.has(primaryVersion.id) ? 'text-rose-500' : 'text-slate-500 hover:text-rose-500'
+                }`}
+                title={likedVersionIds.has(primaryVersion.id) ? text.unlikePrimary : text.likePrimary}
+              >
+                <Heart className={`mr-1.5 h-4 w-4 ${likedVersionIds.has(primaryVersion.id) ? 'fill-current' : ''}`} />
+                {text.versionLikes(primaryVersion.likeCount)}
+              </button>
+            )}
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -812,6 +916,7 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
             <div className="space-y-3">
               {versions.map((version) => {
                 const isCurrent = version.id === deploy.currentVersionId;
+                const isPrimary = version.id === primaryVersion?.id;
                 const isSelected = version.id === selectedVersion?.id;
                 const publicVersionUrl = getVersionUrl(version);
                 return (
@@ -843,11 +948,20 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
                               {text.alreadyCurrent}
                             </span>
                           )}
+                          {isPrimary && (
+                            <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold text-violet-700">
+                              {text.primaryVersion}
+                            </span>
+                          )}
                         </div>
                         <p className="mt-1 line-clamp-2 text-xs text-slate-500">
                           {version.description || version.title || version.filename}
                         </p>
                         <p className="mt-2 text-xs text-slate-400">{formatDate(version.createdAt)}</p>
+                        <p className="mt-1 inline-flex items-center text-xs text-slate-400">
+                          <Heart className="mr-1 h-3.5 w-3.5" />
+                          {text.versionLikes(version.likeCount)}
+                        </p>
                       </div>
                       <span className="shrink-0 text-xs text-slate-400">{formatFileSize(version.fileSize)}</span>
                     </div>
@@ -865,6 +979,21 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
                           {publicVersionUrl}
                         </p>
                         <div className="mt-2 flex flex-wrap gap-1.5">
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleLikeVersion(version);
+                            }}
+                            className={`rounded-md p-2 transition ${
+                              likedVersionIds.has(version.id)
+                                ? 'text-rose-500'
+                                : 'text-slate-400 hover:bg-slate-50 hover:text-rose-500'
+                            }`}
+                            title={likedVersionIds.has(version.id) ? text.unlikeVersion : text.likeVersion}
+                          >
+                            <Heart className={`h-4 w-4 ${likedVersionIds.has(version.id) ? 'fill-current' : ''}`} />
+                          </button>
                           <button
                             type="button"
                             onClick={(event) => {

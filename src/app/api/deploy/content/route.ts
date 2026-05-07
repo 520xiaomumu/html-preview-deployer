@@ -13,6 +13,7 @@ import { createVersionedHtmlPath, getStoragePathFromFilePath } from '@/lib/stora
 import { jsonError, withNoStoreHeaders } from '@/lib/api-response';
 import { getErrorMessage } from '@/lib/error';
 import { fetchDeploymentByCode, getNextVersionNumber } from '@/lib/deployment-queries';
+import { selectPrimaryVersion } from '@/lib/version-selection';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +26,7 @@ type DeploymentVersionRecord = {
   title: string | null;
   description: string | null;
   created_at: string;
+  like_count: number | null;
 };
 
 function resolveStoragePath(deployment: { file_path?: string | null }, code: string) {
@@ -108,8 +110,29 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const storagePath = selectedVersion
-      ? getStoragePathFromFilePath(selectedVersion.file_path, code)
+    let resolvedVersion = selectedVersion;
+    if (!resolvedVersion) {
+      const { data: versions, error: versionsError } = await supabase
+        .from('deployment_versions')
+        .select('*')
+        .eq('deployment_id', deployment.id)
+        .order('version_number', { ascending: false });
+
+      if (versionsError) {
+        return jsonError({
+          status: 500,
+          code: 'DEPLOYMENT_VERSIONS_FETCH_FAILED',
+          message: '版本历史读取失败。',
+          detail: versionsError.message,
+          requestId,
+        });
+      }
+
+      resolvedVersion = selectPrimaryVersion((versions || []) as DeploymentVersionRecord[], deployment.current_version_id);
+    }
+
+    const storagePath = resolvedVersion
+      ? getStoragePathFromFilePath(resolvedVersion.file_path, code)
       : resolveStoragePath(deployment, code);
     const { error: readError, content } = await readHtmlContent(storagePath);
     if (readError || content == null) {
@@ -141,19 +164,23 @@ export async function GET(request: NextRequest) {
         id: deployment.id,
         code: deployment.code,
         status: deployment.status,
-        title: selectedVersion?.title || deployment.title,
-        description: selectedVersion ? selectedVersion.description : deployment.description,
-        filename: selectedVersion?.filename || deployment.filename,
+        title: resolvedVersion?.title || deployment.title,
+        description: resolvedVersion ? resolvedVersion.description : deployment.description,
+        filename: resolvedVersion?.filename || deployment.filename,
         url: `${request.nextUrl.protocol}//${request.nextUrl.host}/s/${deployment.code}`,
-        filePath: selectedVersion?.file_path || deployment.file_path,
-        fileSize: selectedVersion?.file_size ?? deployment.file_size,
+        filePath: resolvedVersion?.file_path || deployment.file_path,
+        fileSize: resolvedVersion?.file_size ?? deployment.file_size,
         currentVersionId: deployment.current_version_id ?? null,
-        versionId: selectedVersion?.id ?? deployment.current_version_id ?? null,
-        versionNumber: selectedVersion?.version_number ?? null,
+        versionId: resolvedVersion?.id ?? deployment.current_version_id ?? null,
+        versionNumber: resolvedVersion?.version_number ?? null,
+        versionUrl: resolvedVersion
+          ? `${request.nextUrl.protocol}//${request.nextUrl.host}/s/${deployment.code}/v/${resolvedVersion.version_number}`
+          : null,
+        versionLikeCount: resolvedVersion?.like_count ?? 0,
         likeCount: deployment.like_count ?? 0,
         locked: Number(deployment.like_count ?? 0) > 0,
         content,
-        createdAt: selectedVersion?.created_at || deployment.created_at,
+        createdAt: resolvedVersion?.created_at || deployment.created_at,
         updatedAt: deployment.updated_at,
       },
       withNoStoreHeaders()

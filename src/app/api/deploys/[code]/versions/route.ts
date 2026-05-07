@@ -4,6 +4,7 @@ import { mapDeploymentVersionRow } from '@/lib/deployment-mapper';
 import { SHORT_CODE_PATTERN } from '@/lib/deploy-config';
 import { jsonError, withNoStoreHeaders } from '@/lib/api-response';
 import { getErrorMessage } from '@/lib/error';
+import { selectPrimaryVersion } from '@/lib/version-selection';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,11 +52,14 @@ export async function GET(
       });
     }
 
+    const primaryVersion = selectPrimaryVersion((versions || []) as DeploymentVersionRow[], deployment.current_version_id);
+
     return NextResponse.json(
       {
         success: true,
         code: deployment.code,
         currentVersionId: deployment.current_version_id,
+        primaryVersionId: primaryVersion?.id ?? deployment.current_version_id,
         versions: ((versions || []) as DeploymentVersionRow[]).map(mapDeploymentVersionRow),
       },
       withNoStoreHeaders(),

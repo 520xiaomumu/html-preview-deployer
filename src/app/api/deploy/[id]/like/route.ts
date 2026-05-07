@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db';
 import { jsonError, withNoStoreHeaders } from '@/lib/api-response';
 import { getErrorMessage, isMissingLikeCountError } from '@/lib/error';
+import { DeploymentVersionRow } from '@/lib/db';
+import { selectPrimaryVersion } from '@/lib/version-selection';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,7 +35,7 @@ export async function POST(
     const { id } = await params;
     const { data: deployment, error: fetchError } = await supabase
       .from('deployments')
-      .select('id, status, like_count')
+      .select('id, status, like_count, current_version_id')
       .eq('id', id)
       .maybeSingle();
 
@@ -63,9 +65,33 @@ export async function POST(
       });
     }
 
-    const { data: likeCount, error: likeError } = await supabase.rpc(
-      'increment_deployment_like_count',
-      { target_id: id }
+    const { data: versions, error: versionsError } = await supabase
+      .from('deployment_versions')
+      .select('id, version_number, like_count')
+      .eq('deployment_id', id)
+      .order('version_number', { ascending: false });
+
+    if (versionsError) {
+      return jsonError({
+        status: 500,
+        code: 'DEPLOYMENT_VERSIONS_FETCH_FAILED',
+        message: '版本历史读取失败。',
+        detail: versionsError.message,
+      });
+    }
+
+    const primaryVersion = selectPrimaryVersion((versions || []) as DeploymentVersionRow[], deployment.current_version_id);
+    if (!primaryVersion) {
+      return jsonError({
+        status: 404,
+        code: 'DEPLOYMENT_VERSION_NOT_FOUND',
+        message: '未找到可点赞版本。',
+      });
+    }
+
+    const { data: likeRows, error: likeError } = await supabase.rpc(
+      'increment_deployment_version_like_count',
+      { target_version_id: primaryVersion.id }
     );
 
     if (likeError) {
@@ -81,7 +107,9 @@ export async function POST(
       {
         success: true,
         id,
-        likeCount: Number(likeCount ?? deployment.like_count ?? 0),
+        versionId: primaryVersion.id,
+        versionLikeCount: Number(likeRows?.[0]?.version_like_count ?? primaryVersion.like_count ?? 0),
+        likeCount: Number(likeRows?.[0]?.deployment_like_count ?? deployment.like_count ?? 0),
         locked: true,
       },
       withNoStoreHeaders()
@@ -112,7 +140,7 @@ export async function DELETE(
     const { id } = await params;
     const { data: deployment, error: fetchError } = await supabase
       .from('deployments')
-      .select('id, like_count')
+      .select('id, current_version_id, like_count')
       .eq('id', id)
       .maybeSingle();
 
@@ -134,9 +162,33 @@ export async function DELETE(
       });
     }
 
-    const { data: likeCount, error: unlikeError } = await supabase.rpc(
-      'decrement_deployment_like_count',
-      { target_id: id }
+    const { data: versions, error: versionsError } = await supabase
+      .from('deployment_versions')
+      .select('id, version_number, like_count')
+      .eq('deployment_id', id)
+      .order('version_number', { ascending: false });
+
+    if (versionsError) {
+      return jsonError({
+        status: 500,
+        code: 'DEPLOYMENT_VERSIONS_FETCH_FAILED',
+        message: '版本历史读取失败。',
+        detail: versionsError.message,
+      });
+    }
+
+    const primaryVersion = selectPrimaryVersion((versions || []) as DeploymentVersionRow[], deployment.current_version_id);
+    if (!primaryVersion) {
+      return jsonError({
+        status: 404,
+        code: 'DEPLOYMENT_VERSION_NOT_FOUND',
+        message: '未找到可取消点赞版本。',
+      });
+    }
+
+    const { data: likeRows, error: unlikeError } = await supabase.rpc(
+      'decrement_deployment_version_like_count',
+      { target_version_id: primaryVersion.id }
     );
 
     if (unlikeError) {
@@ -148,12 +200,14 @@ export async function DELETE(
       });
     }
 
-    const resolvedLikeCount = Number(likeCount ?? deployment.like_count ?? 0);
+    const resolvedLikeCount = Number(likeRows?.[0]?.deployment_like_count ?? deployment.like_count ?? 0);
 
     return NextResponse.json(
       {
         success: true,
         id,
+        versionId: primaryVersion.id,
+        versionLikeCount: Number(likeRows?.[0]?.version_like_count ?? primaryVersion.like_count ?? 0),
         likeCount: resolvedLikeCount,
         locked: resolvedLikeCount > 0,
       },
