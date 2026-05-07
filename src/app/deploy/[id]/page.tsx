@@ -353,6 +353,12 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
     return `${origin}/s/${deploy.code}/v/${version.versionNumber}`;
   }, [deploy]);
 
+  const getVersionSuffix = useCallback((version?: DeploymentVersion | null) => {
+    if (!deploy) return '';
+    if (!version) return deploy.code;
+    return `${deploy.code}/v/${version.versionNumber}`;
+  }, [deploy]);
+
   const getPreviewUrl = useCallback((version?: DeploymentVersion | null) => {
     const versionUrl = getVersionUrl(version);
     if (!versionUrl) return '';
@@ -642,7 +648,7 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
           code: deploy.code,
           content: sourceDialog.draft,
           title: sourceDialog.version.title || deploy.title,
-          description: sourceDialog.version.description ?? deploy.description ?? '',
+          description: sourceDialog.version.description || deploy.description || sourceDialog.version.title || deploy.title,
           filename: sourceDialog.version.filename,
         }),
       });
@@ -919,6 +925,7 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
                 const isPrimary = version.id === primaryVersion?.id;
                 const isSelected = version.id === selectedVersion?.id;
                 const publicVersionUrl = getVersionUrl(version);
+                const publicVersionSuffix = getVersionSuffix(version);
                 return (
                   <div
                     key={version.id}
@@ -976,7 +983,7 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-xs font-medium text-slate-600" title={publicVersionUrl}>
-                          {publicVersionUrl}
+                          {publicVersionSuffix}
                         </p>
                         <div className="mt-2 flex flex-wrap gap-1.5">
                           <button

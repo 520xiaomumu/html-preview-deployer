@@ -10,10 +10,12 @@ interface DeploySuccessProps {
   url: string;
   qrCode: string;
   code: string;
+  detailUrl?: string;
+  preserveHint?: string;
   onNotify?: (message: string, type?: 'success' | 'error' | 'info') => void;
 }
 
-export default function DeploySuccess({ url, qrCode, code, onNotify }: DeploySuccessProps) {
+export default function DeploySuccess({ url, qrCode, code, detailUrl, preserveHint, onNotify }: DeploySuccessProps) {
   const { isZh } = useLanguage();
 
   const text = isZh
@@ -28,6 +30,9 @@ export default function DeploySuccess({ url, qrCode, code, onNotify }: DeploySuc
         qrcodeAlt: '部署二维码',
         downloadQrcode: '下载二维码',
         backToDeploy: '查看部署历史',
+        preserveTitle: '永久保留',
+        preserveDefault: '打开 htmlcode.fun 项目详情页并手动点赞后，项目会永久保留。',
+        openDetail: '去点赞保留',
       }
     : {
         copied: 'Link copied to clipboard',
@@ -40,6 +45,9 @@ export default function DeploySuccess({ url, qrCode, code, onNotify }: DeploySuc
         qrcodeAlt: 'Deployment QR code',
         downloadQrcode: 'Download QR Code',
         backToDeploy: 'Back to Deployments',
+        preserveTitle: 'Permanent preservation',
+        preserveDefault: 'Open the htmlcode.fun detail page and manually like the project to preserve it permanently.',
+        openDetail: 'Like to preserve',
       };
 
   const handleCopy = () => {
@@ -97,6 +105,20 @@ export default function DeploySuccess({ url, qrCode, code, onNotify }: DeploySuc
             {text.downloadQrcode}
           </a>
         </div>
+      </div>
+
+      <div className="mt-6 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-left">
+        <h3 className="text-sm font-semibold text-emerald-900">{text.preserveTitle}</h3>
+        <p className="mt-1 text-sm leading-relaxed text-emerald-800">{preserveHint || text.preserveDefault}</p>
+        <a
+          href={detailUrl || url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-3 inline-flex items-center text-sm font-medium text-emerald-700 hover:text-emerald-900"
+        >
+          <ExternalLink className="mr-1 h-4 w-4" />
+          {text.openDetail}
+        </a>
       </div>
 
       <div className="mt-8">

@@ -241,6 +241,18 @@ export async function PATCH(request: NextRequest) {
       });
     }
 
+    const requiredDescription = normalizeDescription(body.description);
+    if (!requiredDescription) {
+      return jsonError({
+        status: 400,
+        code: 'DESCRIPTION_REQUIRED',
+        message: '项目介绍不能为空。',
+        detail: '追加 HTML 版本时必须提供 description，哪怕只有一句话。',
+        hint: '示例: {"description":"这个版本更新了页面布局与交互。"}',
+        requestId,
+      });
+    }
+
     const normalizedContent = body.content.trim();
     const fileSize = Buffer.byteLength(normalizedContent, 'utf8');
 
@@ -300,9 +312,7 @@ export async function PATCH(request: NextRequest) {
     const nextTitle = typeof body.title === 'string' && body.title.trim()
       ? body.title.trim()
       : deployment.title;
-    const nextDescription = typeof body.description === 'string'
-      ? normalizeDescription(body.description)
-      : deployment.description;
+    const nextDescription = requiredDescription;
     let nextFilename = deployment.filename;
 
     if (typeof body.filename === 'string' && body.filename.trim()) {
@@ -378,7 +388,10 @@ export async function PATCH(request: NextRequest) {
         fileSize,
         message: 'HTML 新版本已创建。',
         url: `${request.nextUrl.protocol}//${request.nextUrl.host}/s/${code}`,
+        detailUrl: `${request.nextUrl.protocol}//${request.nextUrl.host}/deploy/${deployment.id}`,
         versionUrl: `${request.nextUrl.protocol}//${request.nextUrl.host}/s/${code}/v/${versionNumber}`,
+        currentVersionId: version.id,
+        preserveHint: `请打开 ${request.nextUrl.protocol}//${request.nextUrl.host}/deploy/${deployment.id} 或 ${request.nextUrl.protocol}//${request.nextUrl.host}/s/${code}，在 htmlcode.fun 网页内手动点赞；被点赞的版本会永久保留，主域名会自动指向最高赞版本。`,
       },
       withNoStoreHeaders()
     );

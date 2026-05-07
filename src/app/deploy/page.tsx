@@ -16,6 +16,9 @@ interface DeployResult {
   code: string;
   url: string;
   qrCode: string;
+  detailUrl?: string;
+  versionUrl?: string;
+  preserveHint?: string;
 }
 
 const DEFAULT_FILENAME = 'index.html';
@@ -160,6 +163,9 @@ export default function DeployPage() {
           content,
           filename: deployFilename,
           title: deployFilename.replace(/\.html?$/i, ''),
+          description: isZh
+            ? `由手动部署上传的 HTML 项目：${deployFilename.replace(/\.html?$/i, '')}`
+            : `A manually uploaded HTML project: ${deployFilename.replace(/\.html?$/i, '')}`,
         }),
       });
 
@@ -209,6 +215,8 @@ export default function DeployPage() {
             url={deployResult.url}
             qrCode={deployResult.qrCode}
             code={deployResult.code}
+            detailUrl={deployResult.detailUrl}
+            preserveHint={deployResult.preserveHint}
             onNotify={showToast}
           />
         </div>

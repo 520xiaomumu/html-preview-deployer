@@ -28,7 +28,8 @@ export async function POST(
       return jsonError({
         status: 403,
         code: 'MANUAL_LIKE_REQUIRED',
-        message: '点赞只能从网页内手动操作。',
+        message: '点赞只能从 htmlcode.fun 网页内手动操作，Agent 不能通过 API 点赞。',
+        hint: '请把部署详情页链接交给用户，让用户在浏览器里手动点赞。',
       });
     }
 
@@ -133,7 +134,8 @@ export async function DELETE(
       return jsonError({
         status: 403,
         code: 'MANUAL_UNLIKE_REQUIRED',
-        message: '取消点赞只能从网页内手动操作。',
+        message: '取消点赞只能从 htmlcode.fun 网页内手动操作，Agent 不能通过 API 取消点赞。',
+        hint: '请让用户在浏览器里手动操作。',
       });
     }
 

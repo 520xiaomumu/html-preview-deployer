@@ -3,7 +3,7 @@
   "homepageHighlights": [
     "上传文件：先读取文件内容，再放入 JSON 的 content 字段",
     "直接写代码：将完整 HTML 字符串写入 content 字段即可",
-    "默认填写 description，用一句话介绍你上传的 HTML 是什么，方便商城展示和后续版本识别",
+    "必须填写 description，用一句话介绍你上传的 HTML 是什么，方便商城展示和后续版本识别",
     "支持可选自定义短链：enableCustomCode=true + customCode",
     "短链已存在时，可传 createVersion=true 在同一 code 下追加新版本",
     "日报、周报、榜单等周期更新项目，应复用稳定 customCode，并用 createVersion=true 追加新版本",
@@ -16,8 +16,8 @@
   ],
   "apiRules": [
     "请求头必须为 Content-Type: application/json",
-    "请传 JSON 对象（filename + content + 可选 title）",
-    "默认提供 description：一句话介绍这个 HTML 项目，最多 240 字符",
+    "请传 JSON 对象（filename + content + description + 可选 title）",
+    "必须提供 description：一句话介绍这个 HTML 项目，最多 240 字符",
     "不要使用 curl -F file 或 multipart/form-data",
     "仅支持单个 HTML 请求，不支持批量部署",
     "可选开启自定义短链：enableCustomCode=true + customCode",
@@ -26,6 +26,8 @@
     "如果新部署与已有项目高度相似，优先读取版本历史并追加新版本；例如日报使用 customCode=ai-daily + createVersion=true",
     "已知短链 code 或 url，可读取、下载、追加对应 HTML 版本",
     "可读取版本历史、访问 /s/:code/v/:version 历史版本，并切换 currentVersionId",
+    "部署成功后，请把返回的 url 或 detailUrl 告诉用户，并提示用户到 htmlcode.fun 网页内手动点赞以永久保留项目",
+    "Agent 禁止通过 API 点赞；点赞接口只用于 htmlcode.fun 同源网页内的人工点击，OpenAPI 不提供点赞操作",
     "每次部署成功后，全局冷却 10 秒",
     "冷却期间返回 429，并包含 retryAfterSeconds",
     "最大 HTML 体积 1 MB"

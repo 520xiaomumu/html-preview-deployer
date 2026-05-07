@@ -208,6 +208,20 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    const versionDescription = normalizeDescription(description);
+    if (!versionDescription) {
+      return failResponse({
+        status: 400,
+        code: 'DESCRIPTION_REQUIRED',
+        message: '项目介绍不能为空。',
+        detail: 'Agent 上传项目时必须提供 description，哪怕只有一句话。',
+        hint: '示例: "description": "一个用于展示今日 AI 新闻摘要的单页应用。"',
+        docs: '/api-docs',
+        stage: 'validation',
+        requestId,
+      });
+    }
+
     const customCodeEnabled = enableCustomCode === true;
     const shouldCreateVersion = createVersion === true;
     let resolvedCode: string;
@@ -412,7 +426,6 @@ export async function POST(request: NextRequest) {
     // Get Public URLs
     const { data: { publicUrl: htmlPublicUrl } } = supabase.storage.from('deployments').getPublicUrl(htmlPath);
     const versionTitle = typeof title === 'string' && title.trim() ? title.trim() : normalizedFilename;
-    const versionDescription = normalizeDescription(description);
 
     let deploymentId: string;
     let versionId: string | null = null;
@@ -558,16 +571,23 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    const detailUrl = `${protocol}://${host}/deploy/${deploymentId}`;
+    const versionUrl = `${protocol}://${host}/s/${code}/v/${versionNumber}`;
+
     return NextResponse.json({
       success: true,
       id: deploymentId,
       code,
       url: deployUrl,
+      detailUrl,
+      versionUrl,
       qrCode: qrPublicUrl,
       description: versionDescription,
       versionId,
       versionNumber,
+      currentVersionId: versionId,
       createdVersion: Boolean(existingDeployment),
+      preserveHint: `请打开 ${detailUrl} 或 ${deployUrl}，在 htmlcode.fun 网页内手动点赞；被点赞的版本会永久保留，主域名会自动指向最高赞版本。`,
       requestId,
       cooldownSeconds: COOLDOWN_SECONDS,
       nextAvailableAt: new Date(Date.now() + COOLDOWN_SECONDS * 1000).toISOString(),
