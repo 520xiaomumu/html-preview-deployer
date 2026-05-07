@@ -4,6 +4,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import QRCode from 'qrcode';
 import {
   ArrowLeft,
   Calendar,
@@ -78,12 +79,9 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
             likes: (count: number) => `${count} 个赞`,
             active: '运行中',
             inactive: '已下架',
-            accessInfo: '访问信息',
-            accessLink: '访问链接',
-            qrCode: '二维码',
             qrcodeAlt: '部署二维码',
             downloadQrcode: '下载二维码',
-            previewTitle: '当前版本预览',
+            previewTitle: (version: number | string) => `v${version} 预览`,
             unpublishDeploy: '下架部署',
             deleteForever: '彻底删除',
             lockedByLike: '该项目已被点赞锁定，不能下架、上架或删除。',
@@ -93,6 +91,7 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
             openCurrent: '打开当前版本',
             openVersion: '打开该版本',
             copyLink: '复制链接',
+            copyQrcode: '复制二维码',
             copySource: '复制源码',
             downloadHtml: '下载 HTML',
             viewEdit: '查看/编辑源码',
@@ -102,6 +101,7 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
             loadingSource: '正在读取源码...',
             sourceCopied: '源码已复制到剪贴板',
             linkCopied: '链接已复制到剪贴板',
+            qrcodeCopied: '二维码已复制到剪贴板',
             copyFailed: '复制失败',
             downloadFailed: '下载失败',
             fetchContentFailed: '读取源码失败',
@@ -140,12 +140,9 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
             likes: (count: number) => `${count} likes`,
             active: 'Active',
             inactive: 'Offline',
-            accessInfo: 'Access Info',
-            accessLink: 'Access URL',
-            qrCode: 'QR Code',
             qrcodeAlt: 'Deployment QR code',
             downloadQrcode: 'Download QR Code',
-            previewTitle: 'Current Version Preview',
+            previewTitle: (version: number | string) => `v${version} Preview`,
             unpublishDeploy: 'Unpublish Deployment',
             deleteForever: 'Delete Permanently',
             lockedByLike: 'This project has likes and is locked from status changes or deletion.',
@@ -155,6 +152,7 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
             openCurrent: 'Open current version',
             openVersion: 'Open this version',
             copyLink: 'Copy link',
+            copyQrcode: 'Copy QR code',
             copySource: 'Copy source',
             downloadHtml: 'Download HTML',
             viewEdit: 'View/edit source',
@@ -164,6 +162,7 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
             loadingSource: 'Loading source...',
             sourceCopied: 'Source copied to clipboard',
             linkCopied: 'Link copied to clipboard',
+            qrcodeCopied: 'QR code copied to clipboard',
             copyFailed: 'Copy failed',
             downloadFailed: 'Download failed',
             fetchContentFailed: 'Failed to read source',
@@ -182,6 +181,8 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
   const [loading, setLoading] = useState(true);
   const [id, setId] = useState<string>('');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
+  const [qrCodeUrls, setQrCodeUrls] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<{
     open: boolean;
     message: string;
@@ -255,6 +256,23 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
     if (!deploy) return null;
     return versions.find((version) => version.id === deploy.currentVersionId) || versions[0] || null;
   }, [deploy, versions]);
+  const selectedVersion = useMemo(() => {
+    if (!deploy) return null;
+    return versions.find((version) => version.id === selectedVersionId)
+      || currentVersion
+      || versions[0]
+      || null;
+  }, [currentVersion, deploy, selectedVersionId, versions]);
+
+  useEffect(() => {
+    if (!currentVersion) return;
+    setSelectedVersionId((previous) => {
+      if (previous && versions.some((version) => version.id === previous)) {
+        return previous;
+      }
+      return currentVersion.id;
+    });
+  }, [currentVersion, versions]);
 
   const closeDialog = () => {
     setDialogState((prev) => ({ ...prev, isOpen: false }));
@@ -286,6 +304,49 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
     }
     return `${origin}/s/${deploy.code}/v/${version.versionNumber}`;
   }, [deploy]);
+
+  const getPreviewUrl = useCallback((version?: DeploymentVersion | null) => {
+    const versionUrl = getVersionUrl(version);
+    if (!versionUrl) return '';
+    return `${versionUrl}?preview=1`;
+  }, [getVersionUrl]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const generateQrcodes = async () => {
+      if (!deploy || versions.length === 0 || typeof window === 'undefined') return;
+
+      const missingVersions = versions.filter((version) => !qrCodeUrls[version.id]);
+      if (missingVersions.length === 0) return;
+
+      const generatedEntries = await Promise.all(
+        missingVersions.map(async (version) => {
+          const dataUrl = await QRCode.toDataURL(getVersionUrl(version), {
+            errorCorrectionLevel: 'M',
+            margin: 1,
+            width: 116,
+          });
+          return [version.id, dataUrl] as const;
+        }),
+      );
+
+      if (!cancelled) {
+        setQrCodeUrls((current) => ({
+          ...current,
+          ...Object.fromEntries(generatedEntries),
+        }));
+      }
+    };
+
+    generateQrcodes().catch((error) => {
+      console.error('Generate QR code error', error);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [deploy, getVersionUrl, qrCodeUrls, versions]);
 
   const fetchVersionHtml = useCallback(async (version: DeploymentVersion) => {
     if (!deploy) throw new Error(text.fetchContentFailed);
@@ -377,6 +438,33 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
       setTimeout(() => setCopiedKey(null), 1600);
     } catch (error) {
       console.error('Copy link error', error);
+      showToast(text.copyFailed, 'error');
+    }
+  };
+
+  const handleCopyQrcode = async (version: DeploymentVersion) => {
+    try {
+      const qrCodeUrl = qrCodeUrls[version.id] || await QRCode.toDataURL(getVersionUrl(version), {
+        errorCorrectionLevel: 'M',
+        margin: 1,
+        width: 256,
+      });
+
+      if (typeof ClipboardItem !== 'undefined' && navigator.clipboard.write) {
+        const blob = await (await fetch(qrCodeUrl)).blob();
+        await navigator.clipboard.write([
+          new ClipboardItem({ [blob.type]: blob }),
+        ]);
+        setCopiedKey(`qr-${version.id}`);
+        showToast(text.qrcodeCopied, 'success');
+      } else {
+        await navigator.clipboard.writeText(getVersionUrl(version));
+        setCopiedKey(`link-${version.id}`);
+        showToast(text.linkCopied, 'success');
+      }
+      setTimeout(() => setCopiedKey(null), 1600);
+    } catch (error) {
+      console.error('Copy QR code error', error);
       showToast(text.copyFailed, 'error');
     }
   };
@@ -480,6 +568,7 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
       }
 
       htmlCacheRef.current.clear();
+      setSelectedVersionId(null);
       showToast(text.saveDone, 'success');
       setSourceDialog({
         open: false,
@@ -513,6 +602,8 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
 
   const fullUrl = typeof window === 'undefined' ? '' : `${window.location.origin}/s/${deploy.code}`;
   const currentVersionNumber = currentVersion?.versionNumber || 1;
+  const selectedVersionNumber = selectedVersion?.versionNumber || currentVersionNumber;
+  const selectedPreviewUrl = selectedVersion ? getPreviewUrl(selectedVersion) : `${fullUrl}?preview=1`;
   const canUseLivePreview = deploy.status === 'active';
 
   return (
@@ -663,68 +754,12 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-4">
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="mb-4 text-lg font-semibold text-slate-900">{text.accessInfo}</h2>
-            <div className="grid gap-5 lg:grid-cols-2">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <p className="mb-3 text-sm font-semibold text-slate-600">{text.accessLink}</p>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    readOnly
-                    value={fullUrl}
-                    className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleCopyLink(null)}
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-sky-600 text-white transition hover:bg-sky-700"
-                    title={text.copyLink}
-                  >
-                    {copiedKey === 'link-current' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                  </button>
-                </div>
-                {canUseLivePreview && (
-                  <a
-                    href={fullUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-4 inline-flex items-center text-sm font-medium text-sky-700 hover:text-sky-900"
-                  >
-                    <ExternalLink className="mr-1.5 h-4 w-4" />
-                    {text.openCurrent}
-                  </a>
-                )}
-              </div>
-
-              <div className="flex flex-col items-center rounded-xl border border-slate-200 bg-slate-50 p-4 text-center">
-                <p className="mb-3 text-sm font-semibold text-slate-600">{text.qrCode}</p>
-                {deploy.qrCodePath ? (
-                  <>
-                    <div className="rounded-lg bg-white p-2 shadow-sm">
-                      <img src={deploy.qrCodePath} alt={text.qrcodeAlt} className="h-32 w-32" />
-                    </div>
-                    <a
-                      href={deploy.qrCodePath}
-                      download={`qrcode-${deploy.code}.png`}
-                      className="mt-3 text-sm font-medium text-sky-700 hover:text-sky-900"
-                    >
-                      {text.downloadQrcode}
-                    </a>
-                  </>
-                ) : (
-                  <span className="text-sm text-slate-400">-</span>
-                )}
-              </div>
-            </div>
-          </section>
-
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-slate-900">{text.previewTitle}</h2>
-            <span className="text-sm text-slate-500">{formatFileSize(deploy.fileSize)}</span>
+            <h2 className="text-lg font-semibold text-slate-900">{text.previewTitle(selectedVersionNumber)}</h2>
+            <span className="text-sm text-slate-500">{formatFileSize(selectedVersion?.fileSize ?? deploy.fileSize)}</span>
           </div>
-          {canUseLivePreview ? (
-            <Preview url={fullUrl} />
+          {selectedPreviewUrl ? (
+            <Preview url={selectedPreviewUrl} />
           ) : (
             <div className="flex min-h-[420px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 text-center">
               <PowerOff className="mb-3 h-10 w-10 text-slate-300" />
@@ -777,13 +812,26 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
             <div className="space-y-3">
               {versions.map((version) => {
                 const isCurrent = version.id === deploy.currentVersionId;
+                const isSelected = version.id === selectedVersion?.id;
+                const publicVersionUrl = getVersionUrl(version);
                 return (
                   <div
                     key={version.id}
-                    className={`rounded-xl border p-3 transition ${
-                      isCurrent
-                        ? 'border-sky-200 bg-sky-50/80 shadow-sm'
-                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setSelectedVersionId(version.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        setSelectedVersionId(version.id);
+                      }
+                    }}
+                    className={`rounded-xl border p-3 text-left transition ${
+                      isSelected
+                        ? 'border-sky-300 bg-sky-50/90 shadow-sm'
+                        : isCurrent
+                          ? 'border-emerald-200 bg-emerald-50/60'
+                          : 'border-slate-200 bg-white hover:border-slate-300'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -804,11 +852,51 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
                       <span className="shrink-0 text-xs text-slate-400">{formatFileSize(version.fileSize)}</span>
                     </div>
 
+                    <div className="mt-3 flex items-center gap-3 rounded-lg border border-slate-200 bg-white/75 p-2">
+                      <div className="flex h-[84px] w-[84px] shrink-0 items-center justify-center rounded-md bg-white p-1 shadow-sm">
+                        {qrCodeUrls[version.id] ? (
+                          <img src={qrCodeUrls[version.id]} alt={text.qrcodeAlt} className="h-full w-full" />
+                        ) : (
+                          <span className="text-xs text-slate-300">QR</span>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-medium text-slate-600" title={publicVersionUrl}>
+                          {publicVersionUrl}
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleCopyQrcode(version);
+                            }}
+                            className="rounded-md p-2 text-slate-400 transition hover:bg-slate-50 hover:text-sky-600"
+                            title={text.copyQrcode}
+                          >
+                            {copiedKey === `qr-${version.id}` ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+                          </button>
+                          {qrCodeUrls[version.id] && (
+                            <a
+                              href={qrCodeUrls[version.id]}
+                              download={`qrcode-${deploy.code}-v${version.versionNumber}.png`}
+                              onClick={(event) => event.stopPropagation()}
+                              className="rounded-md p-2 text-slate-400 transition hover:bg-slate-50 hover:text-sky-600"
+                              title={text.downloadQrcode}
+                            >
+                              <Download className="h-4 w-4" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
                     <div className="mt-3 flex flex-wrap gap-1.5">
                       <a
                         href={getVersionUrl(version)}
                         target="_blank"
                         rel="noopener noreferrer"
+                        onClick={(event) => event.stopPropagation()}
                         className="rounded-md p-2 text-slate-400 transition hover:bg-white hover:text-sky-600"
                         title={text.openVersion}
                       >
@@ -816,7 +904,10 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
                       </a>
                       <button
                         type="button"
-                        onClick={() => handleCopyLink(version)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleCopyLink(version);
+                        }}
                         className="rounded-md p-2 text-slate-400 transition hover:bg-white hover:text-sky-600"
                         title={text.copyLink}
                       >
@@ -824,7 +915,10 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleDownload(version)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleDownload(version);
+                        }}
                         className="rounded-md p-2 text-slate-400 transition hover:bg-white hover:text-sky-600"
                         title={text.downloadHtml}
                       >
@@ -832,7 +926,10 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleCopySource(version)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleCopySource(version);
+                        }}
                         className="rounded-md p-2 text-slate-400 transition hover:bg-white hover:text-indigo-600"
                         title={text.copySource}
                       >
@@ -840,7 +937,10 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleOpenSource(version)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleOpenSource(version);
+                        }}
                         className="rounded-md p-2 text-slate-400 transition hover:bg-white hover:text-violet-600"
                         title={text.viewEdit}
                       >
@@ -848,7 +948,10 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleSwitchVersion(version)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleSwitchVersion(version);
+                        }}
                         disabled={isCurrent}
                         className="rounded-md p-2 text-slate-400 transition hover:bg-white hover:text-emerald-600 disabled:cursor-not-allowed disabled:text-slate-300"
                         title={isCurrent ? text.alreadyCurrent : text.switchCurrent}

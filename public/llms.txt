@@ -3,15 +3,19 @@
 Preferred API endpoint:
 - POST https://www.htmlcode.fun/api/deploy
 
+Machine-readable OpenAPI:
+- https://www.htmlcode.fun/openapi.json
+
 Required request format:
 - Content-Type: application/json
 - Body must be a single JSON object, not an array
 - Required fields:
   - filename: string, must end with .html or .htm
   - content: string, full HTML source
-- Optional field:
-  - title: string
+- Agent default field:
   - description: string, one short sentence describing what the HTML page is (max 240 chars)
+- Optional fields:
+  - title: string
   - enableCustomCode: boolean (default false)
   - customCode: string (required only when enableCustomCode=true)
 
@@ -51,10 +55,12 @@ Docs:
 Homepage highlights:
 - 上传文件：先读取文件内容，再放入 JSON 的 content 字段
 - 直接写代码：将完整 HTML 字符串写入 content 字段即可
-- 建议填写 description，用一句话介绍你上传的 HTML 是什么
+- 默认填写 description，用一句话介绍你上传的 HTML 是什么，方便商城展示和后续版本识别
 - 支持可选自定义短链：enableCustomCode=true + customCode
-- 已知 code 或 url，可通过 /api/deploy/content 读取、下载、更新 HTML
-- 网页手动点赞后的项目会锁定，Agent API 只能读取，不能更新
+- 短链已存在时，可传 createVersion=true 在同一 code 下追加新版本
+- 日报、周报、榜单等周期更新项目，应复用稳定 customCode，并用 createVersion=true 追加新版本
+- 已知 code 或 url，可通过 /api/deploy/content 读取、下载、追加 HTML 版本
+- 可通过 /api/deploys/:code/versions 查看版本历史，通过 /api/deploys/:code/current 切换当前版本
 - 不要使用 -F file 或 multipart/form-data
 - 仅支持单个 HTML 内容，不支持批量部署
 - 冷却中返回 429，并提供 retryAfterSeconds

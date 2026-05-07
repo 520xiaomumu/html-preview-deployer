@@ -6,6 +6,7 @@ import { MAX_HTML_SIZE_BYTES, SHORT_CODE_PATTERN, isValidHtmlContent, normalizeD
 import { getErrorMessage } from '@/lib/error';
 import { jsonError } from '@/lib/api-response';
 import { createVersionedHtmlPath } from '@/lib/storage';
+import { fetchDeploymentByCode, getNextVersionNumber } from '@/lib/deployment-queries';
 
 const COOLDOWN_SECONDS = 10;
 
@@ -63,30 +64,6 @@ async function isCodeTaken(code: string) {
   }
 
   return !!data;
-}
-
-async function fetchDeploymentByCode(code: string) {
-  return supabase
-    .from('deployments')
-    .select('*')
-    .eq('code', code)
-    .maybeSingle();
-}
-
-async function getNextVersionNumber(deploymentId: string) {
-  const { data, error } = await supabase
-    .from('deployment_versions')
-    .select('version_number')
-    .eq('deployment_id', deploymentId)
-    .order('version_number', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return Number(data?.version_number ?? 0) + 1;
 }
 
 async function generateUniqueCode() {

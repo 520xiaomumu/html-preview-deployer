@@ -12,6 +12,7 @@ import {
 import { createVersionedHtmlPath, getStoragePathFromFilePath } from '@/lib/storage';
 import { jsonError, withNoStoreHeaders } from '@/lib/api-response';
 import { getErrorMessage } from '@/lib/error';
+import { fetchDeploymentByCode, getNextVersionNumber } from '@/lib/deployment-queries';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,30 +26,6 @@ type DeploymentVersionRecord = {
   description: string | null;
   created_at: string;
 };
-
-async function fetchDeploymentByCode(code: string) {
-  return supabase
-    .from('deployments')
-    .select('*')
-    .eq('code', code)
-    .maybeSingle();
-}
-
-async function getNextVersionNumber(deploymentId: string) {
-  const { data, error } = await supabase
-    .from('deployment_versions')
-    .select('version_number')
-    .eq('deployment_id', deploymentId)
-    .order('version_number', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return Number(data?.version_number ?? 0) + 1;
-}
 
 function resolveStoragePath(deployment: { file_path?: string | null }, code: string) {
   return getStoragePathFromFilePath(deployment.file_path, code);
