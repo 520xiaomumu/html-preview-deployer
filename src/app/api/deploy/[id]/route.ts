@@ -63,7 +63,11 @@ export async function GET(
       .order('version_number', { ascending: false });
 
     const mappedVersions = versionsError ? [] : ((versions || []) as DeploymentVersionRow[]).map(mapDeploymentVersionRow);
-    const primaryVersion = selectPrimaryVersion((versions || []) as DeploymentVersionRow[], formattedDeployment.currentVersionId);
+    const primaryVersion = selectPrimaryVersion(
+      (versions || []) as DeploymentVersionRow[],
+      formattedDeployment.currentVersionId,
+      formattedDeployment.primaryVersionStrategy,
+    );
 
     return NextResponse.json({
       ...formattedDeployment,

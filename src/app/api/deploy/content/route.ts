@@ -27,6 +27,7 @@ type DeploymentVersionRecord = {
   description: string | null;
   created_at: string;
   like_count: number | null;
+  status?: 'active' | 'inactive' | null;
 };
 
 function resolveStoragePath(deployment: { file_path?: string | null }, code: string) {
@@ -128,7 +129,11 @@ export async function GET(request: NextRequest) {
         });
       }
 
-      resolvedVersion = selectPrimaryVersion((versions || []) as DeploymentVersionRecord[], deployment.current_version_id);
+      resolvedVersion = selectPrimaryVersion(
+        (versions || []) as DeploymentVersionRecord[],
+        deployment.current_version_id,
+        deployment.primary_version_strategy || 'likes',
+      );
     }
 
     const storagePath = resolvedVersion
@@ -171,6 +176,7 @@ export async function GET(request: NextRequest) {
         filePath: resolvedVersion?.file_path || deployment.file_path,
         fileSize: resolvedVersion?.file_size ?? deployment.file_size,
         currentVersionId: deployment.current_version_id ?? null,
+        primaryVersionStrategy: deployment.primary_version_strategy || 'likes',
         versionId: resolvedVersion?.id ?? deployment.current_version_id ?? null,
         versionNumber: resolvedVersion?.version_number ?? null,
         versionUrl: resolvedVersion
@@ -391,6 +397,7 @@ export async function PATCH(request: NextRequest) {
         detailUrl: `${request.nextUrl.protocol}//${request.nextUrl.host}/deploy/${deployment.id}`,
         versionUrl: `${request.nextUrl.protocol}//${request.nextUrl.host}/s/${code}/v/${versionNumber}`,
         currentVersionId: version.id,
+        primaryVersionStrategy: deployment.primary_version_strategy || 'likes',
         preserveHint: `请打开 ${request.nextUrl.protocol}//${request.nextUrl.host}/deploy/${deployment.id} 或 ${request.nextUrl.protocol}//${request.nextUrl.host}/s/${code}，在 htmlcode.fun 网页内手动点赞；被点赞的版本会永久保留，主域名会自动指向最高赞版本。`,
       },
       withNoStoreHeaders()

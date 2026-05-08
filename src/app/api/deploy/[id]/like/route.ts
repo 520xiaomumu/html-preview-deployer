@@ -36,7 +36,7 @@ export async function POST(
     const { id } = await params;
     const { data: deployment, error: fetchError } = await supabase
       .from('deployments')
-      .select('id, status, like_count, current_version_id')
+      .select('id, status, like_count, current_version_id, primary_version_strategy')
       .eq('id', id)
       .maybeSingle();
 
@@ -81,7 +81,11 @@ export async function POST(
       });
     }
 
-    const primaryVersion = selectPrimaryVersion((versions || []) as DeploymentVersionRow[], deployment.current_version_id);
+    const primaryVersion = selectPrimaryVersion(
+      (versions || []) as DeploymentVersionRow[],
+      deployment.current_version_id,
+      deployment.primary_version_strategy || 'likes',
+    );
     if (!primaryVersion) {
       return jsonError({
         status: 404,
@@ -142,7 +146,7 @@ export async function DELETE(
     const { id } = await params;
     const { data: deployment, error: fetchError } = await supabase
       .from('deployments')
-      .select('id, current_version_id, like_count')
+      .select('id, current_version_id, like_count, primary_version_strategy')
       .eq('id', id)
       .maybeSingle();
 
@@ -179,7 +183,11 @@ export async function DELETE(
       });
     }
 
-    const primaryVersion = selectPrimaryVersion((versions || []) as DeploymentVersionRow[], deployment.current_version_id);
+    const primaryVersion = selectPrimaryVersion(
+      (versions || []) as DeploymentVersionRow[],
+      deployment.current_version_id,
+      deployment.primary_version_strategy || 'likes',
+    );
     if (!primaryVersion) {
       return jsonError({
         status: 404,

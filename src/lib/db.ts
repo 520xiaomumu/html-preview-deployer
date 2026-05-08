@@ -24,6 +24,7 @@ export interface Deployment {
   id: string;
   code: string;
   currentVersionId: string | null;
+  primaryVersionStrategy: 'likes' | 'latest';
   title: string;
   description: string | null;
   filename: string;
@@ -57,6 +58,7 @@ export interface DeploymentRow {
   id: string;
   code: string;
   current_version_id: string | null;
+  primary_version_strategy?: 'likes' | 'latest' | null;
   title: string;
   description: string | null;
   filename: string;

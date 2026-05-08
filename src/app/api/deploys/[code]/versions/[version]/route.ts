@@ -17,6 +17,7 @@ type DeploymentForVersionEdit = {
   id: string;
   code: string;
   current_version_id: string | null;
+  primary_version_strategy?: 'likes' | 'latest' | null;
 };
 
 function parseVersionSelector(version: string) {
@@ -33,7 +34,7 @@ async function fetchDeploymentAndVersion(code: string, version: string) {
 
   const { data: deployment, error: deploymentError } = await supabase
     .from('deployments')
-    .select('id, code, current_version_id')
+    .select('id, code, current_version_id, primary_version_strategy')
     .eq('code', code)
     .maybeSingle();
 
@@ -89,10 +90,11 @@ async function fetchVersions(deploymentId: string) {
 
 async function syncDeploymentCurrent(deployment: DeploymentForVersionEdit) {
   const versions = await fetchVersions(deployment.id);
-  const currentVersion = versions.find(
-    (version) => version.id === deployment.current_version_id && (version.status || 'active') === 'active',
+  const nextCurrent = selectPrimaryVersion(
+    versions,
+    deployment.current_version_id,
+    deployment.primary_version_strategy || 'likes',
   );
-  const nextCurrent = currentVersion || selectPrimaryVersion(versions, deployment.current_version_id);
 
   if (!nextCurrent) {
     return { currentVersion: null, versions };

@@ -20,6 +20,7 @@ import {
   RotateCcw,
   Save,
   Trash2,
+  Upload,
   X,
 } from 'lucide-react';
 import { Deployment, DeploymentVersion } from '@/lib/db';
@@ -52,6 +53,7 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
   const { language, isZh } = useLanguage();
   const router = useRouter();
   const htmlCacheRef = useRef<Map<string, string>>(new Map());
+  const versionUploadInputRef = useRef<HTMLInputElement>(null);
 
   const text = useMemo(
     () =>
@@ -82,6 +84,16 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
             inactive: '已下架',
             versionInactive: '已下架',
             primaryVersionRule: '主域名由最高赞版本决定',
+            latestPrimaryRule: '主域名仅显示最新上架版本',
+            latestPrimaryToggle: '仅显示最新版本',
+            latestPrimaryTip: '适合日报、周报等日更项目；关闭后回到最高赞版本优先。',
+            strategyUpdated: '主域名策略已更新',
+            strategyUpdateFailed: '主域名策略更新失败',
+            uploadVersion: '上传版本',
+            uploadingVersion: '正在上传版本...',
+            uploadVersionDone: '已上传为新版本',
+            uploadVersionFailed: '上传版本失败',
+            invalidHtmlFile: '请选择 .html 或 .htm 文件',
             primaryVersion: '主版本',
             qrcodeAlt: '部署二维码',
             downloadQrcode: '下载二维码',
@@ -163,6 +175,16 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
             inactive: 'Offline',
             versionInactive: 'Offline',
             primaryVersionRule: 'The main URL follows the most-liked version',
+            latestPrimaryRule: 'The main URL only shows the latest active version',
+            latestPrimaryToggle: 'Latest version only',
+            latestPrimaryTip: 'Useful for daily or weekly recurring projects. Turn it off to use the most-liked version.',
+            strategyUpdated: 'Main URL strategy updated',
+            strategyUpdateFailed: 'Failed to update main URL strategy',
+            uploadVersion: 'Upload version',
+            uploadingVersion: 'Uploading version...',
+            uploadVersionDone: 'Uploaded as a new version',
+            uploadVersionFailed: 'Failed to upload version',
+            invalidHtmlFile: 'Choose a .html or .htm file',
             primaryVersion: 'Main version',
             qrcodeAlt: 'Deployment QR code',
             downloadQrcode: 'Download QR Code',
@@ -241,6 +263,7 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
     loading: false,
     saving: false,
   });
+  const [uploadingVersion, setUploadingVersion] = useState(false);
   const [dialogState, setDialogState] = useState<{
     isOpen: boolean;
     type: 'danger' | 'warning' | 'info';
@@ -300,6 +323,9 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
   }, [activeVersions, deploy, versions]);
   const primaryVersion = useMemo(() => {
     if (!deploy) return null;
+    if (deploy.primaryVersionStrategy === 'latest') {
+      return activeVersions[0] || currentVersion || null;
+    }
     return activeVersions.find((version) => version.id === deploy.primaryVersionId)
       || activeVersions
         .filter((version) => version.likeCount > 0)
@@ -476,6 +502,29 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
         }
       },
     );
+  };
+
+  const handleTogglePrimaryStrategy = async () => {
+    if (!deploy) return;
+    const nextStrategy = deploy.primaryVersionStrategy === 'latest' ? 'likes' : 'latest';
+    try {
+      const res = await fetch(`/api/deploys/${deploy.code}/primary-strategy`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ primaryVersionStrategy: nextStrategy }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || text.strategyUpdateFailed);
+      }
+
+      htmlCacheRef.current.clear();
+      showToast(text.strategyUpdated, 'success');
+      await fetchDeploy(id);
+    } catch (error) {
+      console.error('Toggle primary strategy error', error);
+      showToast(text.strategyUpdateFailed, 'error');
+    }
   };
 
   const handleDelete = () => {
@@ -759,6 +808,50 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
     }
   };
 
+  const handleUploadVersionFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !deploy) return;
+
+    if (!/\.html?$/i.test(file.name)) {
+      showToast(text.invalidHtmlFile, 'error');
+      return;
+    }
+
+    setUploadingVersion(true);
+    try {
+      const content = await file.text();
+      const title = file.name.replace(/\.html?$/i, '');
+      const res = await fetch('/api/deploy/content', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: deploy.code,
+          content,
+          filename: file.name,
+          title,
+          description: isZh
+            ? `由手动上传添加的新版本：${title}`
+            : `A manually uploaded new version: ${title}`,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || text.uploadVersionFailed);
+      }
+
+      htmlCacheRef.current.clear();
+      setSelectedVersionId(null);
+      showToast(text.uploadVersionDone, 'success');
+      await fetchDeploy(id);
+    } catch (error) {
+      console.error('Upload version error', error);
+      showToast(text.uploadVersionFailed, 'error');
+    } finally {
+      setUploadingVersion(false);
+    }
+  };
+
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US');
   };
@@ -779,6 +872,7 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
   const selectedPreviewUrl = selectedVersion ? getPreviewUrl(selectedVersion) : `${fullUrl}?preview=1`;
   const canUseLivePreview = deploy.status === 'active';
   const primaryVersionNumber = primaryVersion?.versionNumber || currentVersionNumber;
+  const usesLatestPrimary = deploy.primaryVersionStrategy === 'latest';
 
   return (
     <div className="space-y-6 pb-8">
@@ -795,6 +889,13 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
         message={dialogState.message}
         onConfirm={dialogState.onConfirm}
         onCancel={closeDialog}
+      />
+      <input
+        ref={versionUploadInputRef}
+        type="file"
+        accept=".html,.htm,text/html"
+        className="hidden"
+        onChange={handleUploadVersionFile}
       />
 
       {sourceDialog.open && (
@@ -898,7 +999,22 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
               {deploy.status === 'active' ? text.active : text.inactive}
             </span>
           </div>
-          <p className="mt-2 text-xs text-slate-400">{text.primaryVersionRule}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-slate-500">
+            <span>{usesLatestPrimary ? text.latestPrimaryRule : text.primaryVersionRule}</span>
+            <button
+              type="button"
+              onClick={handleTogglePrimaryStrategy}
+              className={`inline-flex items-center rounded-full border px-2 py-1 text-xs font-semibold transition ${
+                usesLatestPrimary
+                  ? 'border-sky-200 bg-sky-50 text-sky-700'
+                  : 'border-slate-200 bg-slate-50 text-slate-500 hover:border-sky-200 hover:text-sky-700'
+              }`}
+              title={text.latestPrimaryTip}
+            >
+              <span className={`mr-1.5 h-3 w-3 rounded-full ${usesLatestPrimary ? 'bg-sky-500' : 'bg-slate-300'}`} />
+              {text.latestPrimaryToggle}
+            </button>
+          </div>
           <p className="mt-2 max-w-3xl text-sm text-slate-500">{deploy.description || text.descriptionFallback}</p>
           <div className="mt-3 flex flex-wrap gap-4 text-sm text-slate-500">
             <span className="inline-flex items-center">
@@ -994,13 +1110,25 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
           </div>
         </div>
 
-        <aside className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <aside className="flex flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm xl:sticky xl:top-28 xl:max-h-[calc(100vh-8rem)]">
           <div className="mb-4 flex items-center justify-between">
             <div>
               <h2 className="text-base font-semibold text-slate-900">{text.versionHistory}</h2>
               <p className="text-xs text-slate-500">{text.versions(versions.length)}</p>
             </div>
-            <Code2 className="h-5 w-5 text-slate-400" />
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => versionUploadInputRef.current?.click()}
+                disabled={uploadingVersion}
+                className="inline-flex items-center rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                title={text.uploadVersion}
+              >
+                <Upload className="mr-1.5 h-3.5 w-3.5" />
+                {uploadingVersion ? text.uploadingVersion : text.uploadVersion}
+              </button>
+              <Code2 className="h-5 w-5 text-slate-400" />
+            </div>
           </div>
 
           {versions.length === 0 ? (
@@ -1008,7 +1136,7 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
               {text.emptyVersions}
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="min-h-0 space-y-3 overflow-y-auto pr-1 xl:flex-1">
               {versions.map((version) => {
                 const isCurrent = version.id === deploy.currentVersionId;
                 const isPrimary = version.id === primaryVersion?.id;

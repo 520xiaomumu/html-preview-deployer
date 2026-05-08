@@ -24,7 +24,7 @@ export async function GET(
 
     const { data: deployment, error: deploymentError } = await supabase
       .from('deployments')
-      .select('id, code, current_version_id')
+      .select('id, code, current_version_id, primary_version_strategy')
       .eq('code', code)
       .maybeSingle();
 
@@ -52,13 +52,18 @@ export async function GET(
       });
     }
 
-    const primaryVersion = selectPrimaryVersion((versions || []) as DeploymentVersionRow[], deployment.current_version_id);
+    const primaryVersion = selectPrimaryVersion(
+      (versions || []) as DeploymentVersionRow[],
+      deployment.current_version_id,
+      deployment.primary_version_strategy || 'likes',
+    );
 
     return NextResponse.json(
       {
         success: true,
         code: deployment.code,
         currentVersionId: deployment.current_version_id,
+        primaryVersionStrategy: deployment.primary_version_strategy || 'likes',
         primaryVersionId: primaryVersion?.id ?? deployment.current_version_id,
         versions: ((versions || []) as DeploymentVersionRow[]).map(mapDeploymentVersionRow),
       },

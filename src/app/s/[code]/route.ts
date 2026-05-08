@@ -20,7 +20,7 @@ export async function GET(
     // For preview mode (admin embed), allow inactive deployments too
     const query = supabase
       .from('deployments')
-      .select('id, file_path, status, current_version_id')
+      .select('id, file_path, status, current_version_id, primary_version_strategy')
       .eq('code', code);
     
     if (!isPreview) {
@@ -55,7 +55,11 @@ export async function GET(
       console.error('Fetch versions error:', versionsError);
     }
 
-    const primaryVersion = selectPrimaryVersion((versions || []) as DeploymentVersionRow[], deployment.current_version_id);
+    const primaryVersion = selectPrimaryVersion(
+      (versions || []) as DeploymentVersionRow[],
+      deployment.current_version_id,
+      deployment.primary_version_strategy || 'likes',
+    );
     const storagePath = getStoragePathFromFilePath(primaryVersion?.file_path || deployment.file_path, code);
     const { data: fileData, error: downloadError } = await supabase.storage
       .from('deployments')

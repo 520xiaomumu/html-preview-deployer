@@ -5,6 +5,7 @@ export function mapDeploymentRow(row: DeploymentRow): Deployment {
     id: row.id,
     code: row.code,
     currentVersionId: row.current_version_id ?? null,
+    primaryVersionStrategy: row.primary_version_strategy || 'likes',
     title: row.title,
     description: row.description,
     filename: row.filename,

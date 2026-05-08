@@ -9,6 +9,7 @@ const endpoints = [
   ['GET', '/api/deploy/content?code={code}', 'Read HTML metadata and source. Add version={number} for history.'],
   ['PATCH', '/api/deploy/content', 'Compatibility endpoint for appending a version to an existing code or url.'],
   ['GET', '/api/deploys/{code}/versions', 'List version history.'],
+  ['GET/PATCH', '/api/deploys/{code}/primary-strategy', 'Read or set main URL strategy: likes by default, latest for daily updates.'],
   ['PATCH', '/api/deploys/{code}/versions/{version}', 'Overwrite an unlocked version, or set status=active/inactive for one version.'],
   ['DELETE', '/api/deploys/{code}/versions/{version}', 'Delete one unlocked version.'],
   ['PATCH', '/api/deploys/{code}/current', 'Switch the public current version.'],
@@ -22,6 +23,10 @@ const workflows = [
   {
     name: 'Stable link or recurring update',
     steps: 'POST /api/deploy with enableCustomCode=true + customCode; add createVersion=true for the next version',
+  },
+  {
+    name: 'Daily latest main URL',
+    steps: 'PATCH /api/deploys/{code}/primary-strategy with primaryVersionStrategy=latest',
   },
   {
     name: 'Inspect or reuse an app',
@@ -65,7 +70,7 @@ export default function ApiDocsPage() {
         endpointTitle: '接口速览',
         firstDeploy: '普通部署示例',
         recurring: '周期更新项目示例',
-        recurringNote: '日报、周报、榜单等周期内容复用稳定 customCode，并通过 createVersion=true 追加版本；若要修正某个未点赞版本，可按短链和版本号覆盖。',
+        recurringNote: '日报、周报、榜单等周期内容复用稳定 customCode，并通过 createVersion=true 追加版本；若主域名只应显示最新日报，可把 primaryVersionStrategy 设为 latest。',
       }
     : {
         title: 'API / OpenAPI Docs',
@@ -78,7 +83,7 @@ export default function ApiDocsPage() {
         endpointTitle: 'Endpoints',
         firstDeploy: 'Basic Deploy Example',
         recurring: 'Recurring Project Example',
-        recurringNote: 'Daily reports, weekly reports, rankings, and similar recurring content should reuse a stable customCode and append with createVersion=true; fix an unlocked version by code and version number.',
+        recurringNote: 'Daily reports, weekly reports, rankings, and similar recurring content should reuse a stable customCode and append with createVersion=true; set primaryVersionStrategy to latest when the main URL should always show the newest issue.',
       };
 
   return (

@@ -586,6 +586,9 @@ export async function POST(request: NextRequest) {
       versionId,
       versionNumber,
       currentVersionId: versionId,
+      primaryVersionStrategy: typeof existingDeployment?.primary_version_strategy === 'string'
+        ? existingDeployment.primary_version_strategy
+        : 'likes',
       createdVersion: Boolean(existingDeployment),
       preserveHint: `请打开 ${detailUrl} 或 ${deployUrl}，在 htmlcode.fun 网页内手动点赞；被点赞的版本会永久保留，主域名会自动指向最高赞版本。`,
       requestId,
