@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { FileCode2, Sparkles } from 'lucide-react';
 import { useLanguage } from '@/components/LanguageProvider';
+import CorsToggle from '@/components/CorsToggle';
 
 function LogoMark() {
   return (
@@ -137,6 +138,8 @@ export default function Navbar() {
             <Sparkles className="h-4 w-4 sm:mr-1.5" />
             <span className="hidden sm:inline">{text.apiDocs}</span>
           </Link>
+
+          <CorsToggle />
 
           <div className="mx-2 hidden h-5 w-px bg-sky-200 md:block" />
 
