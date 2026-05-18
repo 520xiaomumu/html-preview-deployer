@@ -3,9 +3,11 @@ import { DeploymentRow, supabase } from '@/lib/db';
 import { mapDeploymentRow } from '@/lib/deployment-mapper';
 import { getErrorMessage, isMissingLikeCountError } from '@/lib/error';
 import { jsonError } from '@/lib/api-response';
+import { getIterationCount } from '@/lib/deployment-retention';
 
-const DEPLOYMENT_COLUMNS = 'id, code, current_version_id, title, description, filename, file_path, file_size, qr_code_path, created_at, updated_at, view_count, status';
+const DEPLOYMENT_COLUMNS = 'id, code, current_version_id, title, description, filename, file_path, file_size, qr_code_path, created_at, updated_at, view_count, status, expires_at';
 const DEPLOYMENT_COLUMNS_WITH_LIKES = `${DEPLOYMENT_COLUMNS}, like_count`;
+const VERSION_COUNT_COLUMNS = 'deployment_id';
 
 function parseSort(sortBy: string | null, includeLikeCount = true) {
   switch (sortBy) {
@@ -70,10 +72,32 @@ export async function GET(request: NextRequest) {
     if (error) throw new Error(error.message);
 
     const deployRows = (deploys || []) as Partial<DeploymentRow>[];
+    const deploymentIds = deployRows
+      .map((deploy) => deploy.id)
+      .filter((id): id is string => typeof id === 'string');
+    const versionCounts = new Map<string, number>();
+
+    if (deploymentIds.length > 0) {
+      const { data: versionCountRows, error: versionCountError } = await supabase
+        .from('deployment_versions')
+        .select(VERSION_COUNT_COLUMNS)
+        .in('deployment_id', deploymentIds);
+
+      if (versionCountError) {
+        console.error('Fetch deployment version counts error:', versionCountError);
+      } else {
+        for (const row of versionCountRows || []) {
+          const deploymentId = String(row.deployment_id);
+          versionCounts.set(deploymentId, (versionCounts.get(deploymentId) || 0) + 1);
+        }
+      }
+    }
+
     const formattedDeploys = deployRows.map((deploy) =>
       mapDeploymentRow({
         ...deploy,
         like_count: includeLikeCount ? deploy.like_count ?? 0 : 0,
+        version_count: getIterationCount(versionCounts.get(String(deploy.id))) + 1,
       } as DeploymentRow)
     );
     const total = count || 0;

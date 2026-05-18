@@ -38,6 +38,9 @@ async function main() {
   if (deploy.agentGuideUrl !== 'https://www.htmlcode.fun/s/htmlcode-fun-guide') {
     throw new Error(`agentGuideUrl missing: ${JSON.stringify(deploy)}`);
   }
+  if (typeof deploy.expiresAt !== 'string') {
+    throw new Error(`expiresAt missing: ${JSON.stringify(deploy)}`);
+  }
 
   const readRes = await fetch(`${BASE_URL}/api/deploy/content?code=${code}`);
   const read = await readRes.json();
@@ -60,6 +63,12 @@ async function main() {
   const patch = await patchRes.json();
   if (!patchRes.ok || !patch.success) {
     throw new Error(`patch failed: ${JSON.stringify(patch)}`);
+  }
+
+  const listRes = await fetch(`${BASE_URL}/api/deploys?q=${code}&pageSize=1`);
+  const list = await listRes.json();
+  if (!listRes.ok || Number(list.deploys?.[0]?.versionCount) < 2) {
+    throw new Error(`version count verification failed: ${JSON.stringify(list)}`);
   }
 
   const downloadRes = await fetch(`${BASE_URL}/api/deploy/content?code=${code}&download=1`);

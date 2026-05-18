@@ -354,6 +354,7 @@ export async function PATCH(request: NextRequest) {
         filename: nextFilename,
         file_path: publicUrl,
         file_size: fileSize,
+        expires_at: null,
         updated_at: updatedAt,
       })
       .eq('id', deployment.id);

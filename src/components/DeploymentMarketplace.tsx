@@ -17,8 +17,10 @@ import {
   Heart,
   Code2,
   X,
+  Layers3,
 } from 'lucide-react';
 import { Deployment } from '@/lib/db';
+import { getIterationCount } from '@/lib/deployment-retention';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import Toast from '@/components/Toast';
 import { useLanguage } from '@/components/LanguageProvider';
@@ -115,6 +117,7 @@ export default function DeploymentMarketplace({
             addressTitle: (code: string) => `访问地址: /s/${code}`,
             views: (count: number) => `${count} 次访问`,
             likes: (count: number) => `${count} 个赞`,
+            iterations: (count: number) => `迭代 ${count} 次`,
             detailTitle: '查看详情',
             likeProject: '点赞并锁定项目',
             likedProject: '取消点赞',
@@ -185,6 +188,7 @@ export default function DeploymentMarketplace({
             addressTitle: (code: string) => `URL: /s/${code}`,
             views: (count: number) => `${count} views`,
             likes: (count: number) => `${count} likes`,
+            iterations: (count: number) => `${count} iterations`,
             detailTitle: 'View details',
             likeProject: 'Like and lock project',
             likedProject: 'Remove like',
@@ -718,6 +722,8 @@ export default function DeploymentMarketplace({
                     {text.views(deploy.viewCount)}
                     <Heart className="ml-4 mr-2 h-4 w-4" />
                     {text.likes(deploy.likeCount)}
+                    <Layers3 className="ml-4 mr-2 h-4 w-4" />
+                    {text.iterations(getIterationCount(deploy.versionCount))}
                   </div>
                   <div className="flex items-center">
                     <span className="line-clamp-2 text-slate-500" title={deploy.description || text.descriptionFallback}>

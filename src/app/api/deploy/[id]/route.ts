@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DeploymentRow, DeploymentVersionRow, supabase } from '@/lib/db';
 import { mapDeploymentRow, mapDeploymentVersionRow } from '@/lib/deployment-mapper';
-import { getStoragePathFromFilePath, listHtmlPathsByCode } from '@/lib/storage';
 import { getErrorMessage, isMissingLikeCountError } from '@/lib/error';
 import { jsonError } from '@/lib/api-response';
 import { selectPrimaryVersion } from '@/lib/version-selection';
+import { deleteDeploymentFilesAndRecord } from '@/lib/deployment-delete';
 
 async function fetchDeploymentLockState(id: string) {
   const { data, error } = await supabase
@@ -189,52 +189,7 @@ export async function DELETE(
       });
     }
 
-    const bucket = supabase.storage.from('deployments');
-    let htmlPaths: string[] = [];
-    const { data: versions } = await supabase
-      .from('deployment_versions')
-      .select('file_path')
-      .eq('deployment_id', deployment.id);
-
-    htmlPaths = (versions || [])
-      .map((version) => getStoragePathFromFilePath(version.file_path, code))
-      .filter((path, index, paths) => path && paths.indexOf(path) === index);
-
-    try {
-      const discoveredPaths = await listHtmlPathsByCode(bucket, code);
-      htmlPaths = Array.from(new Set([...htmlPaths, ...discoveredPaths]));
-    } catch (listError) {
-      console.error('Error listing html files from storage:', listError);
-    }
-
-    if (htmlPaths.length === 0) {
-      htmlPaths.push(`html/${code}.html`);
-    }
-
-    const qrPath = `qrcodes/${code}.png`;
-
-    const { error: storageError } = await bucket.remove([...htmlPaths, qrPath]);
-      
-    if (storageError) {
-      console.error('Error deleting files from storage:', storageError);
-      // We continue to delete from DB even if storage fails, or we could stop.
-      // Usually better to clean up DB.
-    }
-
-    // Hard delete: Remove from DB
-    const { error: deleteError } = await supabase
-      .from('deployments')
-      .delete()
-      .eq('id', id);
-
-    if (deleteError) {
-      return jsonError({
-        status: 500,
-        code: 'DEPLOYMENT_DELETE_FAILED',
-        message: '部署删除失败。',
-        detail: deleteError.message,
-      });
-    }
+    await deleteDeploymentFilesAndRecord({ id: deployment.id, code });
 
     return NextResponse.json({ success: true });
   } catch (error: unknown) {

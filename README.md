@@ -118,6 +118,8 @@ See `/api-docs` in the running app for agent-oriented guidance.
 New short-link responses also include `agentGuideUrl`
 (`https://www.htmlcode.fun/s/htmlcode-fun-guide`) so agents can pass along a
 stable guide for using htmlcode.fun.
+New deployments that receive neither a manual like nor an appended version within
+24 hours are eligible for automatic cleanup.
 
 ## Common Commands
 
