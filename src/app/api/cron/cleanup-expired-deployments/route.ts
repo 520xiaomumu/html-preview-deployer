@@ -6,7 +6,6 @@ import { getErrorMessage } from '@/lib/error';
 
 export const dynamic = 'force-dynamic';
 
-const CLEANUP_LIMIT = 300;
 const CANDIDATE_PAGE_SIZE = 500;
 
 function isAuthorized(request: NextRequest) {
@@ -19,7 +18,7 @@ async function fetchCleanupCandidates() {
   const candidates: Array<{ id: string; code: string; like_count: number | null }> = [];
   let from = 0;
 
-  while (candidates.length < CLEANUP_LIMIT) {
+  while (true) {
     const { data, error } = await supabase
       .from('deployments')
       .select('id, code, like_count')
@@ -46,7 +45,7 @@ async function fetchCleanupCandidates() {
     from += CANDIDATE_PAGE_SIZE;
   }
 
-  return candidates.slice(0, CLEANUP_LIMIT);
+  return candidates;
 }
 
 export async function GET(request: NextRequest) {
