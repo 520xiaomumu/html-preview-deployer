@@ -5,8 +5,10 @@ import { deleteDeploymentFilesAndRecord } from '@/lib/deployment-delete';
 import { getErrorMessage } from '@/lib/error';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 300;
 
 const CANDIDATE_PAGE_SIZE = 500;
+const DELETE_CONCURRENCY = 20;
 
 function isAuthorized(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
@@ -21,7 +23,7 @@ async function fetchCleanupCandidates() {
   while (true) {
     const { data, error } = await supabase
       .from('deployments')
-      .select('id, code, like_count')
+      .select('id, code, like_count, deployment_versions!deployment_versions_deployment_id_fkey(count)')
       .or('like_count.eq.0,like_count.is.null')
       .order('created_at', { ascending: true })
       .range(from, from + CANDIDATE_PAGE_SIZE - 1);
@@ -29,18 +31,7 @@ async function fetchCleanupCandidates() {
     if (error) throw error;
     if (!data?.length) break;
 
-    const versionCounts = new Map<string, number>();
-    const { data: versionRows, error: versionError } = await supabase
-      .from('deployment_versions')
-      .select('deployment_id')
-      .in('deployment_id', data.map((deployment) => deployment.id));
-
-    if (versionError) throw versionError;
-    for (const row of versionRows || []) {
-      versionCounts.set(row.deployment_id, (versionCounts.get(row.deployment_id) || 0) + 1);
-    }
-
-    candidates.push(...data.filter((deployment) => (versionCounts.get(deployment.id) || 0) === 1));
+    candidates.push(...data.filter((deployment) => deployment.deployment_versions[0]?.count === 1));
     if (data.length < CANDIDATE_PAGE_SIZE) break;
     from += CANDIDATE_PAGE_SIZE;
   }
@@ -62,13 +53,15 @@ export async function GET(request: NextRequest) {
     const deleted: Array<{ id: string; code: string }> = [];
     const failed: Array<{ id: string; code: string; error: string }> = [];
 
-    for (const deployment of candidates) {
-      try {
-        await deleteDeploymentFilesAndRecord({ id: deployment.id, code: deployment.code });
-        deleted.push({ id: deployment.id, code: deployment.code });
-      } catch (deleteError: unknown) {
-        failed.push({ id: deployment.id, code: deployment.code, error: getErrorMessage(deleteError) });
-      }
+    for (let from = 0; from < candidates.length; from += DELETE_CONCURRENCY) {
+      await Promise.all(candidates.slice(from, from + DELETE_CONCURRENCY).map(async (deployment) => {
+        try {
+          await deleteDeploymentFilesAndRecord({ id: deployment.id, code: deployment.code });
+          deleted.push({ id: deployment.id, code: deployment.code });
+        } catch (deleteError: unknown) {
+          failed.push({ id: deployment.id, code: deployment.code, error: getErrorMessage(deleteError) });
+        }
+      }));
     }
 
     console.log('cleanup-unpreserved-deployments', {
