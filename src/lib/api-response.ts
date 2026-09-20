@@ -3,7 +3,11 @@ import {
   CDN_CACHE_CONTROL,
   CDN_EDGE_CACHE_CONTROL,
   NO_STORE_CACHE_CONTROL,
+  VERSION_HTML_CACHE_CONTROL,
+  VERSION_HTML_EDGE_CACHE_CONTROL,
 } from '@/lib/deploy-config';
+
+type HtmlCacheProfile = 'current' | 'version';
 
 type JsonErrorOptions = {
   status: number;
@@ -81,18 +85,25 @@ export function manualLikeRequiredError(action: 'like' | 'unlike') {
   });
 }
 
-export function htmlResponse(content: string, preview = false, downloadFilename?: string) {
+export function htmlResponse(
+  content: string,
+  preview = false,
+  downloadFilename?: string,
+  cacheProfile: HtmlCacheProfile = 'current',
+) {
   const noStore = preview || Boolean(downloadFilename);
+  const cacheControl = cacheProfile === 'version' ? VERSION_HTML_CACHE_CONTROL : CDN_CACHE_CONTROL;
+  const edgeCacheControl = cacheProfile === 'version' ? VERSION_HTML_EDGE_CACHE_CONTROL : CDN_EDGE_CACHE_CONTROL;
   const headers: Record<string, string> = {
     'Content-Type': 'text/html; charset=utf-8',
-    'Cache-Control': noStore ? NO_STORE_CACHE_CONTROL : CDN_CACHE_CONTROL,
+    'Cache-Control': noStore ? NO_STORE_CACHE_CONTROL : cacheControl,
   };
 
   if (downloadFilename) {
     headers['Content-Disposition'] = `attachment; filename="${downloadFilename}"`;
   } else if (!preview) {
-    headers['CDN-Cache-Control'] = CDN_EDGE_CACHE_CONTROL;
-    headers['Vercel-CDN-Cache-Control'] = CDN_EDGE_CACHE_CONTROL;
+    headers['CDN-Cache-Control'] = edgeCacheControl;
+    headers['Vercel-CDN-Cache-Control'] = edgeCacheControl;
   }
 
   return new NextResponse(content, { headers });

@@ -29,6 +29,7 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import Preview from '@/components/Preview';
 import Toast from '@/components/Toast';
 import { useLanguage } from '@/components/LanguageProvider';
+import { fetchCorsState as readCorsState } from '@/lib/client-cors-state';
 
 type DeploymentWithVersions = Deployment & {
   versions?: DeploymentVersion[];
@@ -89,8 +90,8 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
             primaryVersionRule: '主域名由最高赞版本决定',
             latestPrimaryRule: '主域名仅显示最新上架版本',
             latestPrimaryToggle: '仅显示最新版本',
-            latestPrimaryTip: '适合日报、周报等日更项目；关闭后回到最高赞版本优先。',
-            strategyUpdated: '主域名策略已更新',
+            latestPrimaryTip: '适合日报、周报等日更项目；公开链接会在缓存刷新后自动同步。',
+            strategyUpdated: '主域名策略已更新，公开链接会在缓存刷新后自动同步。',
             strategyUpdateFailed: '主域名策略更新失败',
             uploadVersion: '上传版本',
             uploadingVersion: '正在上传版本...',
@@ -143,7 +144,7 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
             overwriteVersion: '覆盖该版本',
             overwriteDone: '已覆盖该版本',
             overwriteFailed: '覆盖版本失败',
-            switchDone: '已切换当前版本',
+            switchDone: '当前版本已更新，公开链接会在缓存刷新后自动同步。',
             switchFailed: '切换当前版本失败',
             emptyVersions: '暂无版本历史',
             descriptionFallback: '暂无简介',
@@ -182,8 +183,8 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
             primaryVersionRule: 'The main URL follows the most-liked version',
             latestPrimaryRule: 'The main URL only shows the latest active version',
             latestPrimaryToggle: 'Latest version only',
-            latestPrimaryTip: 'Useful for daily or weekly recurring projects. Turn it off to use the most-liked version.',
-            strategyUpdated: 'Main URL strategy updated',
+            latestPrimaryTip: 'Useful for recurring projects. The public link refreshes automatically with the cache.',
+            strategyUpdated: 'Main URL strategy updated. The public link will refresh automatically.',
             strategyUpdateFailed: 'Failed to update main URL strategy',
             uploadVersion: 'Upload version',
             uploadingVersion: 'Uploading version...',
@@ -236,7 +237,7 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
             overwriteVersion: 'Overwrite this version',
             overwriteDone: 'Version overwritten',
             overwriteFailed: 'Failed to overwrite version',
-            switchDone: 'Current version switched',
+            switchDone: 'Current version updated. The public link will refresh automatically.',
             switchFailed: 'Failed to switch current version',
             emptyVersions: 'No version history yet',
             descriptionFallback: 'No description yet',
@@ -324,12 +325,9 @@ export default function DeploymentDetailPage({ params }: { params: Promise<{ id:
   useEffect(() => {
     let cancelled = false;
     const fetchCorsState = () => {
-      fetch('/api/cors', { cache: 'no-store' })
-        .then((res) => res.json())
-        .then((data) => {
-          if (!cancelled && typeof data?.enabled === 'boolean') {
-            setCorsEnabled(data.enabled);
-          }
+      readCorsState(true)
+        .then((enabled) => {
+          if (!cancelled) setCorsEnabled(enabled);
         })
         .catch(() => {
           if (!cancelled) setCorsEnabled(false);

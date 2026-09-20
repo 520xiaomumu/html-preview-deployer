@@ -380,6 +380,7 @@ export async function POST(request: NextRequest) {
       .from('deployments')
       .upload(htmlPath, normalizedContent, {
         contentType: 'text/html',
+        cacheControl: '31536000',
         upsert: true
       });
 
@@ -406,6 +407,7 @@ export async function POST(request: NextRequest) {
         .from('deployments')
         .upload(qrPath, qrBuffer, {
           contentType: 'image/png',
+          cacheControl: '31536000',
           upsert: true
         });
 

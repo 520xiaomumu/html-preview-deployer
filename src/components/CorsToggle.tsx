@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Shield, ShieldCheck, X } from 'lucide-react';
 import { useLanguage } from '@/components/LanguageProvider';
+import { cacheCorsState, fetchCorsState } from '@/lib/client-cors-state';
 
 export default function CorsToggle() {
   const { isZh } = useLanguage();
@@ -27,6 +28,7 @@ export default function CorsToggle() {
         wrongPassword: '密码错误',
         networkError: '网络错误，请稍后再试',
         empty: '密码不能为空',
+        propagation: '状态会在各访问节点逐步同步，通常很快，最长约 20 分钟。',
       }
     : {
         on: 'CORS On',
@@ -42,16 +44,14 @@ export default function CorsToggle() {
         wrongPassword: 'Wrong password',
         networkError: 'Network error, try again',
         empty: 'Password is required',
+        propagation: 'The change rolls out across access nodes, usually quickly and within about 20 minutes.',
       };
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/cors', { cache: 'no-store' })
-      .then((res) => res.json())
-      .then((data) => {
-        if (!cancelled && typeof data?.enabled === 'boolean') {
-          setEnabled(data.enabled);
-        }
+    fetchCorsState()
+      .then((value) => {
+        if (!cancelled) setEnabled(value);
       })
       .catch(() => {
         if (!cancelled) setEnabled(false);
@@ -101,6 +101,7 @@ export default function CorsToggle() {
       const data = await res.json();
       if (typeof data?.enabled === 'boolean') {
         setEnabled(data.enabled);
+        cacheCorsState(data.enabled);
         window.dispatchEvent(new CustomEvent('htmlcode:cors-state', { detail: { enabled: data.enabled } }));
       }
       closeDialog();
@@ -169,6 +170,7 @@ export default function CorsToggle() {
             {error && (
               <p className="mt-2 text-sm text-red-600">{error}</p>
             )}
+            <p className="mt-2 text-xs leading-5 text-slate-500">{text.propagation}</p>
             <div className="mt-5 flex justify-end gap-3">
               <button
                 type="button"

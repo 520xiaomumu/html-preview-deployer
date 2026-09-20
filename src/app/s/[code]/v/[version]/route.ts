@@ -10,6 +10,7 @@ export async function GET(
   try {
     const { code, version } = await params;
     const isPreview = request.nextUrl.searchParams.get('preview') === '1';
+    const revision = request.nextUrl.searchParams.get('rev');
     const versionNumber = Number(version);
 
     if (!Number.isInteger(versionNumber) || versionNumber <= 0) {
@@ -33,7 +34,7 @@ export async function GET(
 
     const { data: selectedVersion, error: versionError } = await supabase
       .from('deployment_versions')
-      .select('file_path, status')
+      .select('id, file_path, status')
       .eq('deployment_id', deployment.id)
       .eq('version_number', versionNumber)
       .maybeSingle();
@@ -42,14 +43,20 @@ export async function GET(
       return new NextResponse('Deployment version not found', { status: 404 });
     }
 
-    if (!isPreview) {
-      void supabase
-        .rpc('increment_deployment_view_count', { target_id: deployment.id })
-        .then(({ error: incrementError }) => {
-          if (incrementError) {
-            console.error('Increment view count error:', incrementError);
-          }
-        });
+    const expectedRevision = getStoragePathFromFilePath(selectedVersion.file_path, code).split('/').pop()
+      || selectedVersion.id;
+
+    if (!isPreview && revision !== expectedRevision) {
+      const { error: incrementError } = await supabase
+        .rpc('increment_deployment_view_count', { target_id: deployment.id });
+      if (incrementError) console.error('Increment view count error:', incrementError);
+
+      const destination = new URL(request.url);
+      destination.searchParams.set('rev', expectedRevision);
+      return NextResponse.redirect(destination, {
+        status: 307,
+        headers: { 'Cache-Control': 'no-store' },
+      });
     }
 
     const storagePath = getStoragePathFromFilePath(selectedVersion.file_path, code);
@@ -64,7 +71,7 @@ export async function GET(
 
     const content = await fileData.text();
 
-    return htmlResponse(content, isPreview);
+    return htmlResponse(content, isPreview, undefined, 'version');
   } catch (error: unknown) {
     console.error('Serve version error:', error);
     return new NextResponse('Internal Server Error', { status: 500 });

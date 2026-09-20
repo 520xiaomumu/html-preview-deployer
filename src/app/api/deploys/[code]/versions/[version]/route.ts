@@ -199,6 +199,7 @@ export async function PATCH(
       const bucket = supabase.storage.from('deployments');
       const { error: uploadError } = await bucket.upload(storagePath, normalizedContent, {
         contentType: 'text/html',
+        cacheControl: '31536000',
         upsert: true,
       });
 

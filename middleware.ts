@@ -9,6 +9,13 @@ const CORS_HEADERS: Record<string, string> = {
 };
 
 export async function middleware(request: NextRequest) {
+  const origin = request.headers.get('origin');
+  if (!origin || origin === request.nextUrl.origin) {
+    return request.method === 'OPTIONS'
+      ? new NextResponse(null, { status: 204 })
+      : NextResponse.next();
+  }
+
   const corsOn = await isCorsEnabled();
 
   if (request.method === 'OPTIONS') {

@@ -5,7 +5,10 @@ export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  return NextResponse.json({ enabled: await isCorsEnabled() });
+  return NextResponse.json(
+    { enabled: await isCorsEnabled() },
+    { headers: { 'Cache-Control': 'private, max-age=60' } },
+  );
 }
 
 export async function POST(request: NextRequest) {

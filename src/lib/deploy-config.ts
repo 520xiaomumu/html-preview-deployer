@@ -3,8 +3,10 @@ export const MAX_DESCRIPTION_LENGTH = 240;
 export const SHORT_CODE_PATTERN = /^[a-z0-9](?:[a-z0-9-]{2,30}[a-z0-9])?$/;
 
 export const NO_STORE_CACHE_CONTROL = 'no-store, no-cache, must-revalidate, max-age=0';
-export const CDN_CACHE_CONTROL = 'public, max-age=0, s-maxage=120, stale-while-revalidate=600';
-export const CDN_EDGE_CACHE_CONTROL = 's-maxage=120, stale-while-revalidate=600';
+export const CDN_CACHE_CONTROL = 'public, max-age=0, s-maxage=1800, stale-while-revalidate=3600';
+export const CDN_EDGE_CACHE_CONTROL = 's-maxage=1800, stale-while-revalidate=3600';
+export const VERSION_HTML_CACHE_CONTROL = 'public, max-age=0, s-maxage=2592000, stale-while-revalidate=604800';
+export const VERSION_HTML_EDGE_CACHE_CONTROL = 's-maxage=2592000, stale-while-revalidate=604800';
 
 export function isValidHtmlContent(content: string) {
   return /(<!doctype html|<html[\s>])/i.test(content);

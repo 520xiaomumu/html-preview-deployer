@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/db';
 
 const CORS_SETTING_KEY = 'cors_enabled';
-const CACHE_TTL_MS = 5000;
+const CACHE_TTL_MS = 20 * 60 * 1000;
 
 let cachedCorsState: { enabled: boolean; expiresAt: number } | null = null;
 

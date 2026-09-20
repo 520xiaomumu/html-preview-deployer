@@ -128,6 +128,8 @@ enabled = true
 policy = "per_worker"
 inspector_port = 8083
 deno_version = 2
+[functions.cleanup-expired-deployments]
+verify_jwt = false
 [analytics]
 enabled = true
 port = 54327

@@ -29,18 +29,6 @@ export async function GET(
       return new NextResponse('Deployment not found or inactive', { status: 404 });
     }
 
-    // Skip view count increment for embed/preview requests
-    if (!isPreview) {
-      // Do not block page response on stats write.
-      void supabase
-        .rpc('increment_deployment_view_count', { target_id: deployment.id })
-        .then(({ error: incrementError }) => {
-          if (incrementError) {
-            console.error('Increment view count error:', incrementError);
-          }
-        });
-    }
-
     const { data: versions, error: versionsError } = await supabase
       .from('deployment_versions')
       .select('id, version_number, file_path, like_count, status')
@@ -56,6 +44,23 @@ export async function GET(
       deployment.current_version_id,
       deployment.primary_version_strategy || 'likes',
     );
+
+    if (!isPreview && primaryVersion) {
+      const { error: incrementError } = await supabase
+        .rpc('increment_deployment_view_count', { target_id: deployment.id });
+      if (incrementError) console.error('Increment view count error:', incrementError);
+
+      const destination = new URL(`/s/${code}/v/${primaryVersion.version_number}`, request.url);
+      destination.searchParams.set(
+        'rev',
+        getStoragePathFromFilePath(primaryVersion.file_path, code).split('/').pop() || primaryVersion.id,
+      );
+      return NextResponse.redirect(destination, {
+        status: 307,
+        headers: { 'Cache-Control': 'no-store' },
+      });
+    }
+
     const storagePath = getStoragePathFromFilePath(primaryVersion?.file_path || deployment.file_path, code);
     const { data: fileData, error: downloadError } = await supabase.storage
       .from('deployments')

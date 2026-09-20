@@ -25,6 +25,7 @@ import { getIterationCount } from '@/lib/deployment-retention';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import Toast from '@/components/Toast';
 import { useLanguage } from '@/components/LanguageProvider';
+import { fetchCorsState as readCorsState } from '@/lib/client-cors-state';
 
 interface DeploymentMarketplaceProps {
   title?: string;
@@ -309,12 +310,9 @@ export default function DeploymentMarketplace({
   useEffect(() => {
     let cancelled = false;
     const fetchCorsState = () => {
-      fetch('/api/cors', { cache: 'no-store' })
-        .then((res) => res.json())
-        .then((data) => {
-          if (!cancelled && typeof data?.enabled === 'boolean') {
-            setCorsEnabled(data.enabled);
-          }
+      readCorsState(true)
+        .then((enabled) => {
+          if (!cancelled) setCorsEnabled(enabled);
         })
         .catch(() => {
           if (!cancelled) setCorsEnabled(false);
