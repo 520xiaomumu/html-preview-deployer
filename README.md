@@ -31,7 +31,10 @@ Use Vercel as the source of truth, then pull values into `.env.local`.
 NEXT_PUBLIC_SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
 CORS_TOGGLE_PASSWORD=
+HTML_SERVE_VIA=
 ```
+
+Leave `HTML_SERVE_VIA` empty until `serve-deployment-html` is deployed. Set it to `edge` to serve version HTML from that function.
 
 Pull production variables locally:
 
@@ -48,11 +51,32 @@ npm run dev
 
 Open http://localhost:3000.
 
+## HTML Delivery
+
+Public pages stay on `/s/:code`. That route resolves the primary version (likes, then current, then latest), records the view without waiting on the database, and redirects once to `/s/:code/v/:version?rev=<object>`.
+
+When `rev` already matches the stored object, the version route does not send another `no-store` redirect. Marketplace and admin previews of an active version are sent to that same `/s/:code/v/:version?rev=` URL, so they share its cache instead of downloading the file on every view. `GET /api/deploys` is cached at the CDN for 30 seconds.
+
+`HTML_SERVE_VIA` controls where those bytes come from:
+
+- Unset or any value other than `edge`: this app responds with `text/html; charset=utf-8` and a long CDN lifetime. A CDN miss is the only time the file passes through a Vercel function.
+- `edge`: a matching `rev` redirects to the Supabase Edge Function `serve-deployment-html`. The redirect itself can be cached; the browser then loads the HTML from Supabase, so the file does not count as Vercel Fast Origin Transfer. The address bar ends on that function URL. Deploy the function before setting this:
+
+```bash
+npx supabase functions deploy serve-deployment-html --no-verify-jwt
+```
+
+Then set `HTML_SERVE_VIA=edge` in Vercel and redeploy the app.
+
+The function answers only for a deployment version that exists. Inactive deployments and versions are rejected unless `preview=1` is present, which is the same preview gate the app already uses. Its response `Content-Type` is `text/html; charset=utf-8`. CORS headers are added only while the CORS admin toggle is on.
+
+Do not point browsers at the Storage object URL. The `deployments` bucket stays public so uploads, QR codes, and the service-role download keep working, but Supabase Storage rewrites any object whose type contains `text/html` to `text/plain` and the public response also sends `Content-Security-Policy: default-src 'none'; sandbox`. Signed Storage URLs use that same renderer, so they do not restore a rendered page. No extra Storage policy is required for the edge function.
+
 ## Database And Storage
 
 Supabase migrations live in `supabase/migrations`.
 
-They cover the deployment tables, version tables, like counters, app settings, RPC helpers, and storage policies used by the app.
+They cover the deployment tables, version tables, like counters, app settings, RPC helpers, and storage policies used by the app. The `deployments` bucket remains public, with public read access, as created by the initial migration.
 
 Sync local migrations to the linked Supabase project:
 
@@ -125,6 +149,7 @@ nor an appended version.
 
 ```bash
 npm run dev
+npm run test
 npm run lint
 npm run build
 npm run smoke:prod

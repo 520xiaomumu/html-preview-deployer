@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db';
-import { htmlResponse } from '@/lib/api-response';
 import { getStoragePathFromFilePath } from '@/lib/storage';
+import {
+  buildEdgeHtmlUrl,
+  htmlServeViaEdge,
+  isPubliclyVisible,
+  planVersionServe,
+  revisionFromStoragePath,
+} from '@/lib/html-origin';
+import { scheduleDeploymentViewCount } from '@/lib/schedule-view-count';
+import { cachedEdgeRedirect, noStoreRedirect, proxyStoredHtml } from '@/lib/serve-html';
 
 export async function GET(
   request: NextRequest,
@@ -43,35 +51,41 @@ export async function GET(
       return new NextResponse('Deployment version not found', { status: 404 });
     }
 
-    const expectedRevision = getStoragePathFromFilePath(selectedVersion.file_path, code).split('/').pop()
-      || selectedVersion.id;
-
-    if (!isPreview && revision !== expectedRevision) {
-      const { error: incrementError } = await supabase
-        .rpc('increment_deployment_view_count', { target_id: deployment.id });
-      if (incrementError) console.error('Increment view count error:', incrementError);
-
-      const destination = new URL(request.url);
-      destination.searchParams.set('rev', expectedRevision);
-      return NextResponse.redirect(destination, {
-        status: 307,
-        headers: { 'Cache-Control': 'no-store' },
-      });
-    }
-
     const storagePath = getStoragePathFromFilePath(selectedVersion.file_path, code);
-    const { data: fileData, error: downloadError } = await supabase.storage
-      .from('deployments')
-      .download(storagePath);
+    const expectedRevision = revisionFromStoragePath(storagePath, selectedVersion.id);
+    const plan = planVersionServe({
+      isPreview,
+      revision,
+      expectedRevision,
+      publiclyVisible: isPubliclyVisible(deployment.status, selectedVersion.status),
+      serveViaEdge: htmlServeViaEdge(),
+    });
 
-    if (downloadError || !fileData) {
-      console.error('Download error:', downloadError);
-      return new NextResponse('File content not found', { status: 404 });
+    if (plan.kind === 'redirect-revision') {
+      if (plan.countView) {
+        scheduleDeploymentViewCount(deployment.id);
+      }
+      const destination = new URL(request.url);
+      destination.searchParams.delete('preview');
+      destination.searchParams.set('rev', plan.revision);
+      return noStoreRedirect(destination);
     }
 
-    const content = await fileData.text();
+    if (plan.kind === 'redirect-edge') {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      if (supabaseUrl) {
+        const edgeUrl = buildEdgeHtmlUrl({
+          supabaseUrl,
+          code,
+          version: versionNumber,
+          revision: plan.revision,
+          preview: plan.preview,
+        });
+        return plan.cacheable ? cachedEdgeRedirect(edgeUrl) : noStoreRedirect(edgeUrl);
+      }
+    }
 
-    return htmlResponse(content, isPreview, undefined, 'version');
+    return proxyStoredHtml(storagePath, plan.preview, 'version');
   } catch (error: unknown) {
     console.error('Serve version error:', error);
     return new NextResponse('Internal Server Error', { status: 500 });
