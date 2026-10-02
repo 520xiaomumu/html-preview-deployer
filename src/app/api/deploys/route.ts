@@ -84,8 +84,8 @@ export async function GET(request: NextRequest) {
       { deploys: formattedDeploys, total, page, pageSize, totalPages },
       {
         headers: {
-          'CDN-Cache-Control': 's-maxage=3, stale-while-revalidate=5',
-          'Vercel-CDN-Cache-Control': 's-maxage=3, stale-while-revalidate=5',
+          'CDN-Cache-Control': 's-maxage=30, stale-while-revalidate=60',
+          'Vercel-CDN-Cache-Control': 's-maxage=30, stale-while-revalidate=60',
         },
       },
     );
