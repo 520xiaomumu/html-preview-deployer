@@ -3,6 +3,7 @@ import { DeploymentRow, supabase } from '@/lib/db';
 import { mapDeploymentRow } from '@/lib/deployment-mapper';
 import { getErrorMessage, isMissingLikeCountError } from '@/lib/error';
 import { jsonError } from '@/lib/api-response';
+import { LIST_EDGE_CACHE_CONTROL } from '@/lib/deploy-config';
 
 const DEPLOYMENT_COLUMNS = 'id, code, current_version_id, title, description, filename, file_path, file_size, qr_code_path, created_at, updated_at, view_count, version_count, status, expires_at';
 const DEPLOYMENT_COLUMNS_WITH_LIKES = `${DEPLOYMENT_COLUMNS}, like_count`;
@@ -84,8 +85,8 @@ export async function GET(request: NextRequest) {
       { deploys: formattedDeploys, total, page, pageSize, totalPages },
       {
         headers: {
-          'CDN-Cache-Control': 's-maxage=3, stale-while-revalidate=5',
-          'Vercel-CDN-Cache-Control': 's-maxage=3, stale-while-revalidate=5',
+          'CDN-Cache-Control': LIST_EDGE_CACHE_CONTROL,
+          'Vercel-CDN-Cache-Control': LIST_EDGE_CACHE_CONTROL,
         },
       },
     );
