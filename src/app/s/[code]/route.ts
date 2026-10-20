@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db';
-import { htmlResponse } from '@/lib/api-response';
 import { getStoragePathFromFilePath } from '@/lib/storage';
 import { DeploymentVersionRow } from '@/lib/db';
 import { selectPrimaryVersion } from '@/lib/version-selection';
+import { isPubliclyVisible, revisionFromStoragePath } from '@/lib/html-origin';
+import { scheduleDeploymentViewCount } from '@/lib/schedule-view-count';
+import { cachedPreviewRedirect, noStoreRedirect, proxyStoredHtml } from '@/lib/serve-html';
 
 export async function GET(
   request: NextRequest,
@@ -12,17 +14,17 @@ export async function GET(
   try {
     const { code } = await params;
     const isPreview = request.nextUrl.searchParams.get('preview') === '1';
-    
+
     // For preview mode (admin embed), allow inactive deployments too
     const query = supabase
       .from('deployments')
       .select('id, file_path, status, current_version_id, primary_version_strategy')
       .eq('code', code);
-    
+
     if (!isPreview) {
       query.eq('status', 'active');
     }
-    
+
     const { data: deployment, error } = await query.single();
 
     if (error || !deployment) {
@@ -45,36 +47,25 @@ export async function GET(
       deployment.primary_version_strategy || 'likes',
     );
 
-    if (!isPreview && primaryVersion) {
-      const { error: incrementError } = await supabase
-        .rpc('increment_deployment_view_count', { target_id: deployment.id });
-      if (incrementError) console.error('Increment view count error:', incrementError);
-
+    if (
+      primaryVersion
+      && (!isPreview || isPubliclyVisible(deployment.status, primaryVersion.status))
+    ) {
+      const storagePath = getStoragePathFromFilePath(primaryVersion.file_path, code);
+      const revision = revisionFromStoragePath(storagePath, primaryVersion.id);
       const destination = new URL(`/s/${code}/v/${primaryVersion.version_number}`, request.url);
-      destination.searchParams.set(
-        'rev',
-        getStoragePathFromFilePath(primaryVersion.file_path, code).split('/').pop() || primaryVersion.id,
-      );
-      return NextResponse.redirect(destination, {
-        status: 307,
-        headers: { 'Cache-Control': 'no-store' },
-      });
+      destination.searchParams.set('rev', revision);
+
+      if (!isPreview) {
+        scheduleDeploymentViewCount(deployment.id);
+        return noStoreRedirect(destination);
+      }
+
+      return cachedPreviewRedirect(destination);
     }
 
     const storagePath = getStoragePathFromFilePath(primaryVersion?.file_path || deployment.file_path, code);
-    const { data: fileData, error: downloadError } = await supabase.storage
-      .from('deployments')
-      .download(storagePath);
-
-    if (downloadError || !fileData) {
-      console.error('Download error:', downloadError);
-      return new NextResponse('File content not found', { status: 404 });
-    }
-
-    const content = await fileData.text();
-
-    return htmlResponse(content, isPreview);
-
+    return proxyStoredHtml(storagePath, isPreview, 'current');
   } catch (error: unknown) {
     console.error('Serve error:', error);
     return new NextResponse('Internal Server Error', { status: 500 });

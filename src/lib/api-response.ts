@@ -97,7 +97,12 @@ export function htmlResponse(
   const headers: Record<string, string> = {
     'Content-Type': 'text/html; charset=utf-8',
     'Cache-Control': noStore ? NO_STORE_CACHE_CONTROL : cacheControl,
+    'X-Content-Type-Options': 'nosniff',
   };
+
+  if (preview) {
+    headers['X-Robots-Tag'] = 'noindex, nofollow';
+  }
 
   if (downloadFilename) {
     headers['Content-Disposition'] = `attachment; filename="${downloadFilename}"`;

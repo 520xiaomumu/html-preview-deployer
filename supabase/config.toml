@@ -130,6 +130,8 @@ inspector_port = 8083
 deno_version = 2
 [functions.cleanup-expired-deployments]
 verify_jwt = false
+[functions.serve-deployment-html]
+verify_jwt = false
 [analytics]
 enabled = true
 port = 54327

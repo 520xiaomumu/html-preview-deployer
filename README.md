@@ -31,7 +31,10 @@ Use Vercel as the source of truth, then pull values into `.env.local`.
 NEXT_PUBLIC_SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
 CORS_TOGGLE_PASSWORD=
+HTML_SERVE_VIA=
 ```
+
+Leave `HTML_SERVE_VIA` empty until `serve-deployment-html` is deployed. Set it to `edge` to serve version HTML from that function.
 
 Pull production variables locally:
 
@@ -47,6 +50,29 @@ npm run dev
 ```
 
 Open http://localhost:3000.
+
+## HTML Delivery
+
+Public pages stay on `/s/:code`. That route resolves the primary version and redirects once to `/s/:code/v/:version?rev=<object>`. A real visit still increments the view count. Marketplace cards load `/s/:code?preview=1`, which redirects to the same revision URL without counting a view, and that redirect is cached at the CDN for five minutes. Detail previews of an active version end on that same URL. Inactive previews stay uncached.
+
+`rev` is the storage object name. Overwriting a version creates a new object, so a matching `rev` is safe to cache as immutable HTML (`s-maxage=31536000`). A CDN miss is the only time that file passes through a Vercel function.
+
+`HTML_SERVE_VIA` controls where those bytes come from:
+
+- Unset or any value other than `edge`: this app responds with `text/html; charset=utf-8` and the long CDN lifetime above.
+- `edge`: a matching `rev` redirects to the Supabase Edge Function `serve-deployment-html`. The redirect itself is cached for one hour. The browser then loads the HTML from Supabase, so the file does not count as Vercel Fast Origin Transfer. The address bar ends on that function URL. Deploy the function before setting this:
+
+```bash
+npx supabase functions deploy serve-deployment-html --no-verify-jwt
+```
+
+Then set `HTML_SERVE_VIA=edge` in Vercel and redeploy the app. Leave the variable unset to keep serving HTML from this app.
+
+The function answers only for a deployment version that exists. Inactive deployments and versions are rejected unless `preview=1` is present. Its response `Content-Type` is `text/html; charset=utf-8`. CORS headers are added only while the CORS admin toggle is on.
+
+Do not point browsers at the Storage object URL. Supabase Storage rewrites any object whose type contains `text/html` to `text/plain` and sends `Content-Security-Policy: default-src 'none'; sandbox`. The `deployments` bucket stays public so uploads, QR codes, and the service-role download keep working.
+
+`vercel.json` sets `skipMiddlewareRequestBody`. Middleware does not read request bodies. HTML publish still accepts `application/json` on `POST /api/deploy`, `PATCH /api/deploy/content`, and version overwrite. Other content types, and any write to `/s/*`, are refused before the body is forwarded to a function. `public/robots.txt` keeps `/s/` crawlable and disallows `/api/`, `/deploy`, and `preview=1`.
 
 ## Database And Storage
 
@@ -125,6 +151,7 @@ nor an appended version.
 
 ```bash
 npm run dev
+npm run test
 npm run lint
 npm run build
 npm run smoke:prod
