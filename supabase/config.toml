@@ -132,6 +132,8 @@ deno_version = 2
 verify_jwt = false
 [functions.serve-deployment-html]
 verify_jwt = false
+[functions.html-api]
+verify_jwt = false
 [analytics]
 enabled = true
 port = 54327
