@@ -33,6 +33,7 @@ test('write offload matches the upload guard, plus content reads', () => {
 test('only HTML publish and content reads leave Vercel', () => {
   assert.equal(isOffloadedApiRequest('/api/deploy', 'POST'), true);
   assert.equal(isOffloadedApiRequest('/api/deploy/content', 'GET'), true);
+  assert.equal(isOffloadedApiRequest('/api/deploy/content', 'GET', '?code=my-page&download=1'), false);
   assert.equal(isOffloadedApiRequest('/api/deploy/content', 'PATCH'), true);
   assert.equal(isOffloadedApiRequest('/api/deploys/my-page/versions/2', 'PATCH'), true);
   assert.equal(isOffloadedApiRequest('/api/deploys/my-page/versions/2', 'DELETE'), false);

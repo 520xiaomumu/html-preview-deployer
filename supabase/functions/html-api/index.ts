@@ -81,6 +81,12 @@ function jsonError(status: number, code: string, message: string) {
 function toResponse(result: ServiceResult, extraHeaders: Record<string, string>) {
   const headers = new Headers(extraHeaders);
   for (const [key, value] of Object.entries(result.headers)) headers.set(key, value);
+  if (!headers.has('content-type')) {
+    headers.set(
+      'content-type',
+      typeof result.text === 'string' ? 'text/plain; charset=utf-8' : 'application/json; charset=utf-8',
+    );
+  }
   if (typeof result.text === 'string') {
     return new Response(result.text, { status: result.status, headers });
   }

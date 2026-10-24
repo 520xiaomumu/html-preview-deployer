@@ -9,9 +9,14 @@ export function htmlApiOffloadEnabled(env: Record<string, string | undefined> = 
   return Boolean((env.NEXT_PUBLIC_SUPABASE_URL || '').trim());
 }
 
-export function isOffloadedApiRequest(pathname: string, method: string) {
+export function isOffloadedApiRequest(pathname: string, method: string, search = '') {
   const normalizedMethod = method.toUpperCase();
-  if (normalizedMethod === 'GET' && pathname === '/api/deploy/content') return true;
+  if (normalizedMethod === 'GET' && pathname === '/api/deploy/content') {
+    // download=1 is a raw HTML response. The Supabase gateway rewrites text/html to text/plain,
+    // so that one query stays on this app and keeps its content type.
+    const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
+    return params.get('download') !== '1';
+  }
   if (normalizedMethod === 'POST' && pathname === '/api/deploy') return true;
   if (normalizedMethod === 'PATCH' && pathname === '/api/deploy/content') return true;
   return normalizedMethod === 'PATCH' && /^\/api\/deploys\/[^/]+\/versions\/[^/]+$/.test(pathname);

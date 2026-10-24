@@ -80,7 +80,7 @@ export async function middleware(request: NextRequest) {
   // Publish bodies and content reads are large. Answer with a 307 before the
   // function runs so those bytes are not Fast Origin Transfer. skipMiddlewareRequestBody
   // already keeps the body out of middleware; the client follows to Supabase.
-  if (htmlApiOffloadEnabled() && isOffloadedApiRequest(pathname, request.method)) {
+  if (htmlApiOffloadEnabled() && isOffloadedApiRequest(pathname, request.method, request.nextUrl.search)) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     if (supabaseUrl) {
       const destination = buildApiOffloadUrl({
