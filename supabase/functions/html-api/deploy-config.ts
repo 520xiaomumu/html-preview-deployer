@@ -1,0 +1,1 @@
+../../../src/lib/deploy-config.ts

@@ -32,9 +32,10 @@ NEXT_PUBLIC_SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
 CORS_TOGGLE_PASSWORD=
 HTML_SERVE_VIA=
+HTML_API_VIA=
 ```
 
-Leave `HTML_SERVE_VIA` empty until `serve-deployment-html` is deployed. Set it to `edge` to serve version HTML from that function.
+Leave `HTML_SERVE_VIA` empty until `serve-deployment-html` is deployed. Set it to `edge` to serve version HTML from that function. Leave `HTML_API_VIA` empty to send publish and content-read bodies to Supabase. Set it to `vercel` to keep those routes on this app.
 
 Pull production variables locally:
 
@@ -73,6 +74,16 @@ The function answers only for a deployment version that exists. Inactive deploym
 Do not point browsers at the Storage object URL. Supabase Storage rewrites any object whose type contains `text/html` to `text/plain` and sends `Content-Security-Policy: default-src 'none'; sandbox`. The `deployments` bucket stays public so uploads, QR codes, and the service-role download keep working.
 
 `vercel.json` sets `skipMiddlewareRequestBody`. Middleware does not read request bodies. HTML publish still accepts `application/json` on `POST /api/deploy`, `PATCH /api/deploy/content`, and version overwrite. Other content types, and any write to `/s/*`, are refused before the body is forwarded to a function. `public/robots.txt` keeps `/s/` crawlable and disallows `/api/`, `/deploy`, and `preview=1`.
+
+Published pages stay on `htmlcode.fun`. Version HTML is immutable at the CDN (`s-maxage=31536000`), so a repeat view does not transfer the file through a function. The document origin stays on this site because published pages use `localStorage` and expect that host.
+
+Large publish and content-read bodies take a different path. When `NEXT_PUBLIC_SUPABASE_URL` is set and `HTML_API_VIA` is not `vercel`, middleware answers `POST /api/deploy`, `PATCH /api/deploy/content`, `PATCH /api/deploys/:code/versions/:version`, and `GET /api/deploy/content` with `307` to the Supabase Edge Function `html-api` before a Vercel function starts. `GET /api/deploy/content?download=1` stays on this app so the response can remain `text/html`. Clients that follow `307` and resend the body (browsers, Node `fetch`, and Python `requests`) keep working. `curl` needs `--post307` with `-L`, and Go's default client does not replay a POST body. Responses keep the same JSON shape, and links inside them still use the htmlcode.fun origin. Set `HTML_API_VIA=vercel` and redeploy to run those routes on Vercel again.
+
+Deploy the function before relying on the redirect:
+
+```bash
+npx supabase functions deploy html-api --no-verify-jwt
+```
 
 ## Database And Storage
 

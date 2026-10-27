@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --experimental-strip-types --test src/lib/html-origin.test.ts",
+    "test": "node --experimental-strip-types --test src/lib/html-origin.test.ts src/lib/api-offload.test.ts",
     "smoke:prod": "node scripts/smoke-prod.mjs",
     "vercel:link": "npx vercel link",
     "vercel:env:pull": "npx vercel env pull .env.local",

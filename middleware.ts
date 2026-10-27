@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { buildApiOffloadUrl, htmlApiOffloadEnabled, isOffloadedApiRequest } from '@/lib/api-offload';
 import { isCorsEnabled } from '@/lib/cors-state';
 import { NO_STORE_CACHE_CONTROL } from '@/lib/deploy-config';
 import {
@@ -73,6 +74,28 @@ export async function middleware(request: NextRequest) {
     const contentType = request.headers.get('content-type') || '';
     if (!uploadContentTypeAllowed(contentType)) {
       return unsupportedUploadResponse(contentType);
+    }
+  }
+
+  // Publish bodies and content reads are large. Answer with a 307 before the
+  // function runs so those bytes are not Fast Origin Transfer. skipMiddlewareRequestBody
+  // already keeps the body out of middleware; the client follows to Supabase.
+  if (htmlApiOffloadEnabled() && isOffloadedApiRequest(pathname, request.method, request.nextUrl.search)) {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    if (supabaseUrl) {
+      const destination = buildApiOffloadUrl({
+        supabaseUrl,
+        pathname,
+        search: request.nextUrl.search,
+        publicOrigin: request.nextUrl.origin,
+      });
+      return NextResponse.redirect(destination, {
+        status: 307,
+        headers: {
+          'Cache-Control': NO_STORE_CACHE_CONTROL,
+          'X-Robots-Tag': ROBOTS_HEADER,
+        },
+      });
     }
   }
 
