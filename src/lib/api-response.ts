@@ -85,8 +85,7 @@ export function manualLikeRequiredError(action: 'like' | 'unlike') {
   });
 }
 
-export function htmlResponse(
-  content: string,
+export function htmlDocumentHeaders(
   preview = false,
   downloadFilename?: string,
   cacheProfile: HtmlCacheProfile = 'current',
@@ -111,5 +110,16 @@ export function htmlResponse(
     headers['Vercel-CDN-Cache-Control'] = edgeCacheControl;
   }
 
-  return new NextResponse(content, { headers });
+  return headers;
+}
+
+export function htmlResponse(
+  content: string,
+  preview = false,
+  downloadFilename?: string,
+  cacheProfile: HtmlCacheProfile = 'current',
+) {
+  return new NextResponse(content, {
+    headers: htmlDocumentHeaders(preview, downloadFilename, cacheProfile),
+  });
 }

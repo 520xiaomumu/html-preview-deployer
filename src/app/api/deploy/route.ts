@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import { supabase } from '@/lib/db';
 import { postDeploy } from '@/lib/deploy-service';
 import { toNextResponse } from '@/lib/service-response';
+import { purgePublishedPageFromResult } from '@/lib/purge-cache';
 import { jsonError } from '@/lib/api-response';
 import { getErrorMessage } from '@/lib/error';
 
@@ -15,6 +16,7 @@ export async function POST(request: NextRequest) {
       publicOrigin: request.nextUrl.origin,
       createQrPng: async (url) => new Uint8Array(await QRCode.toBuffer(url)),
     });
+    await purgePublishedPageFromResult(result);
     return toNextResponse(result);
   } catch (error: unknown) {
     console.error('Deployment error:', error);

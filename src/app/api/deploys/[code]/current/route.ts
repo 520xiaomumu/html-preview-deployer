@@ -4,6 +4,7 @@ import { SHORT_CODE_PATTERN } from '@/lib/deploy-config';
 import { jsonError, withNoStoreHeaders } from '@/lib/api-response';
 import { getErrorMessage } from '@/lib/error';
 import { fetchDeploymentVersion } from '@/lib/deployment-queries';
+import { purgePublishedPage } from '@/lib/purge-cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -102,6 +103,7 @@ export async function PATCH(
       });
     }
 
+    await purgePublishedPage(deployment.code);
     return NextResponse.json(
       {
         success: true,

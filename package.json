@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --experimental-strip-types --test src/lib/html-origin.test.ts src/lib/api-offload.test.ts",
+    "test": "node --experimental-strip-types --test src/lib/html-origin.test.ts src/lib/api-offload.test.ts src/lib/short-link-cache.test.ts",
     "smoke:prod": "node scripts/smoke-prod.mjs",
     "vercel:link": "npx vercel link",
     "vercel:env:pull": "npx vercel env pull .env.local",
@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.93.3",
+    "@vercel/functions": "^3.11.2",
     "clsx": "^2.1.1",
     "lucide-react": "^0.563.0",
     "next": "^16.2.4",

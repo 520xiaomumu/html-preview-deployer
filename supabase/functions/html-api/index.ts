@@ -78,6 +78,42 @@ function jsonError(status: number, code: string, message: string) {
   });
 }
 
+// Must match shortLinkPurgeToken in src/lib/short-link-cache.ts.
+async function shortLinkPurgeToken(secret: string, code: string) {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const signature = await crypto.subtle.sign(
+    'HMAC',
+    key,
+    new TextEncoder().encode(`short-link:${code.trim().toLowerCase()}`),
+  );
+  return [...new Uint8Array(signature)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function notifyShortLinkPurge(origin: string, secret: string, code: string) {
+  const token = await shortLinkPurgeToken(secret, code);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 2500);
+  try {
+    await fetch(`${origin}/api/cache/short-link`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ code: code.trim().toLowerCase(), token }),
+      signal: controller.signal,
+      cache: 'no-store',
+    });
+  } catch (error) {
+    console.error('Short link purge notify failed:', error);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function toResponse(result: ServiceResult, extraHeaders: Record<string, string>) {
   const headers = new Headers(extraHeaders);
   for (const [key, value] of Object.entries(result.headers)) headers.set(key, value);
@@ -158,6 +194,11 @@ Deno.serve(async (request) => {
       });
     } else {
       return jsonError(404, 'NOT_FOUND', 'Unknown html-api route.');
+    }
+
+    if (request.method !== 'GET' && result.status >= 200 && result.status < 300) {
+      const code = typeof result.json?.code === 'string' ? result.json.code : '';
+      if (code) await notifyShortLinkPurge(publicOrigin, serviceRoleKey, code);
     }
 
     return toResponse(result, extraHeaders);

@@ -6,24 +6,26 @@ import { jsonError } from '@/lib/api-response';
 import { selectPrimaryVersion } from '@/lib/version-selection';
 import { deleteDeploymentFilesAndRecord } from '@/lib/deployment-delete';
 import { isCorsEnabled } from '@/lib/cors-state';
+import { purgePublishedPage } from '@/lib/purge-cache';
 
 async function fetchDeploymentLockState(id: string) {
   const { data, error } = await supabase
     .from('deployments')
-    .select('like_count')
+    .select('code, like_count')
     .eq('id', id)
     .maybeSingle();
 
   if (isMissingLikeCountError(error)) {
     const { data: fallbackData, error: fallbackError } = await supabase
       .from('deployments')
-      .select('id')
+      .select('id, code')
       .eq('id', id)
       .maybeSingle();
 
     return {
       found: Boolean(fallbackData),
       locked: false,
+      code: fallbackData?.code ?? null,
       error: fallbackError?.message,
     };
   }
@@ -31,6 +33,7 @@ async function fetchDeploymentLockState(id: string) {
   return {
     found: Boolean(data),
     locked: Number(data?.like_count ?? 0) > 0,
+    code: data?.code ?? null,
     error: error?.message,
   };
 }
@@ -134,6 +137,7 @@ export async function PATCH(
       });
     }
 
+    await purgePublishedPage(lockState.code);
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     return jsonError({
@@ -191,6 +195,7 @@ export async function DELETE(
     }
 
     await deleteDeploymentFilesAndRecord({ id: deployment.id, code });
+    await purgePublishedPage(code);
 
     return NextResponse.json({ success: true });
   } catch (error: unknown) {

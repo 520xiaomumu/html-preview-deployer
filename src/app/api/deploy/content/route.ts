@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { supabase } from '@/lib/db';
 import { getDeployContent, patchDeployContent } from '@/lib/deploy-service';
 import { toNextResponse } from '@/lib/service-response';
+import { purgePublishedPageFromResult } from '@/lib/purge-cache';
 import { jsonError } from '@/lib/api-response';
 import { getErrorMessage } from '@/lib/error';
 
@@ -36,6 +37,7 @@ export async function PATCH(request: NextRequest) {
       rawBody: await request.text(),
       publicOrigin: request.nextUrl.origin,
     });
+    await purgePublishedPageFromResult(result);
     return toNextResponse(result);
   } catch (error: unknown) {
     return jsonError({

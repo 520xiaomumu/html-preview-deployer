@@ -9,6 +9,7 @@ import {
 import { getErrorMessage, isMissingLikeCountError } from '@/lib/error';
 import { DeploymentVersionRow } from '@/lib/db';
 import { selectPrimaryVersion } from '@/lib/version-selection';
+import { purgePublishedPage } from '@/lib/purge-cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,7 +17,7 @@ async function updatePrimaryVersionLike(id: string, action: 'increment' | 'decre
   const isLike = action === 'increment';
   const { data: deployment, error: fetchError } = await supabase
     .from('deployments')
-    .select('id, status, like_count, current_version_id, primary_version_strategy')
+    .select('id, code, status, like_count, current_version_id, primary_version_strategy')
     .eq('id', id)
     .maybeSingle();
 
@@ -89,6 +90,7 @@ async function updatePrimaryVersionLike(id: string, action: 'increment' | 'decre
   }
 
   const likeCount = Number(likeRows?.[0]?.deployment_like_count ?? deployment.like_count ?? 0);
+  await purgePublishedPage(deployment.code);
 
   return NextResponse.json(
     {

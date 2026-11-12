@@ -3,7 +3,8 @@ import { DeploymentRow, supabase } from '@/lib/db';
 import { mapDeploymentRow } from '@/lib/deployment-mapper';
 import { getErrorMessage, isMissingLikeCountError } from '@/lib/error';
 import { jsonError } from '@/lib/api-response';
-import { LIST_EDGE_CACHE_CONTROL } from '@/lib/deploy-config';
+import { DEPLOY_LIST_CACHE_TAG, LIST_EDGE_CACHE_CONTROL, SHORT_LINK_CACHE_CONTROL } from '@/lib/deploy-config';
+import { tagCachedResponse } from '@/lib/purge-cache';
 
 const DEPLOYMENT_COLUMNS = 'id, code, current_version_id, title, description, filename, file_path, file_size, qr_code_path, created_at, updated_at, view_count, version_count, status, expires_at';
 const DEPLOYMENT_COLUMNS_WITH_LIKES = `${DEPLOYMENT_COLUMNS}, like_count`;
@@ -81,12 +82,15 @@ export async function GET(request: NextRequest) {
     const total = count || 0;
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
+    await tagCachedResponse(DEPLOY_LIST_CACHE_TAG);
     return NextResponse.json(
       { deploys: formattedDeploys, total, page, pageSize, totalPages },
       {
         headers: {
+          'Cache-Control': SHORT_LINK_CACHE_CONTROL,
           'CDN-Cache-Control': LIST_EDGE_CACHE_CONTROL,
           'Vercel-CDN-Cache-Control': LIST_EDGE_CACHE_CONTROL,
+          'Vercel-Cache-Tag': DEPLOY_LIST_CACHE_TAG,
         },
       },
     );
