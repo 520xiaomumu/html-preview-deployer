@@ -8,6 +8,7 @@ import { selectPrimaryVersion } from '@/lib/version-selection';
 import { fetchDeploymentVersion, fetchDeploymentVersions } from '@/lib/deployment-queries';
 import { patchDeployVersion } from '@/lib/deploy-service';
 import { toNextResponse } from '@/lib/service-response';
+import { purgePublishedPage, purgePublishedPageFromResult } from '@/lib/purge-cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -110,6 +111,7 @@ export async function PATCH(
       code,
       version,
     });
+    await purgePublishedPageFromResult(result);
     return toNextResponse(result);
   } catch (error: unknown) {
     return jsonError({
@@ -183,6 +185,7 @@ export async function DELETE(
     }
 
     const { currentVersion } = await syncDeploymentCurrent(found.deployment);
+    await purgePublishedPage(code);
 
     return NextResponse.json(
       {

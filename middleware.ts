@@ -127,5 +127,23 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/api/:path*', '/s/:path*'],
+  matcher: [
+    '/api/:path*',
+    // Browser navigations and marketplace iframes skip middleware so a CDN
+    // hit on /s/* does not start a function. curl and other clients without
+    // Sec-Fetch-Dest still match, and any request that sends Content-Type
+    // (including a browser form POST) still matches so the body is refused
+    // before a function reads it.
+    {
+      source: '/s/:path*',
+      missing: [
+        { type: 'header', key: 'sec-fetch-dest', value: 'document' },
+        { type: 'header', key: 'sec-fetch-dest', value: 'iframe' },
+      ],
+    },
+    {
+      source: '/s/:path*',
+      has: [{ type: 'header', key: 'content-type' }],
+    },
+  ],
 };

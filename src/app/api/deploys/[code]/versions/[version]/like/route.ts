@@ -9,6 +9,7 @@ import {
 } from '@/lib/api-response';
 import { getErrorMessage } from '@/lib/error';
 import { fetchDeploymentVersion } from '@/lib/deployment-queries';
+import { purgePublishedPage } from '@/lib/purge-cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -91,6 +92,7 @@ export async function POST(
       return jsonError({ status, code: errorCode, message: '版本点赞失败。', detail: result.detail });
     }
 
+    await purgePublishedPage(result.deployment.code);
     return NextResponse.json(
       {
         success: true,
@@ -127,6 +129,7 @@ export async function DELETE(
       return jsonError({ status, code: errorCode, message: '取消版本点赞失败。', detail: result.detail });
     }
 
+    await purgePublishedPage(result.deployment.code);
     return NextResponse.json(
       {
         success: true,
